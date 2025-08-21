@@ -1,10 +1,8 @@
-# 🔌 AsyncHTTPClientLight
-
 # 🔌 AsyncHTTPClientLight  
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 
-Libreria leggera e modulare per gestire richieste HTTP su ESP32/ESP8266, 
+Libreria leggera e modulare per gestire richieste HTTP per ESP32, 
 pensata per offrire massima flessibilità, controllo e affidabilità in modalità asincrona.
 
 ---
