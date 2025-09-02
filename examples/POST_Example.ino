@@ -25,8 +25,26 @@ void setup() {
 
   // Callback unificato
   client.onEvent([](HTTPEventType type, const String& msg) {
-    Serial.printf("[EVENTO %d] %s\n", type, msg.c_str());
-  });
+  switch (type) {
+    case HTTPEventType::Response:
+      Serial.println("Risposta ricevuta: " + msg);
+      Serial.println("Codice HTTP: " + String(client.getLastHTTPcode()));
+      break;
+    case HTTPEventType::Timeout:
+      Serial.println("Timeout: " + msg);
+      break;
+    case HTTPEventType::Error:
+      Serial.println("Errore: " + msg);
+      break;
+    case HTTPEventType::Chunk:
+      Serial.println("Chunk ricevuto: " + msg);
+      break;
+    case HTTPEventType::Overload:
+      Serial.println("Richiesta ignorata: " + msg);
+      break;
+  }
+});
+
 
   // Header personalizzati
   client.addHeader("Authorization", "Bearer xyz123");
@@ -46,3 +64,4 @@ void loop() {
     Serial.println(client.getLastResponseBody());
   }
 }
+
