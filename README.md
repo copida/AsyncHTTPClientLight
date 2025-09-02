@@ -65,13 +65,17 @@ if (client.isFinished()) {
 }
 
 
-
 ## Modalità sincrona
 NO: client.poll();
+
 int codhttp = client.runSync("http://example.com/data", "GET", "");
+
 if (codhttp == 200) {
+
   Serial.println(client.getResponse());
+  
 }
+
 
 ## Modalità Mista
 client.poll();
@@ -102,12 +106,11 @@ La funzione runSync() rileva se è in corso una richiesta asincrona
 
 ##  CALLBACK UNIFICATA ###############
 es: tipica callback...
-
+```cpp
     client.onEvent([](HTTPEventType type, const String& msg) {
     switch (type) {
     case HTTPEventType::Response:
       Serial.println("Risposta ricevuta: " + msg);
-      
       Serial.println("Codice HTTP: " + String(client.getLastHTTPcode()));
       break;
     case HTTPEventType::Timeout:
@@ -124,12 +127,16 @@ es: tipica callback...
       break;
     }
     });
-
+```
 ---------------------------------------------------
 🔐 HTTPS
+
 WiFiClientSecure secureClient;
+
 secureClient.setInsecure(); // oppure setCACert(...)
+
 client.setClient(&secureClient);
+--------------------------------------------------
 
 
 🧰 Esempi inclusi
@@ -152,16 +159,15 @@ La libreria è progettata per funzionare in ambienti misti:
 - Quando serve una risposta immediata, usa runSync(...)
 - La libreria gestisce internamente eventuali conflitti
 
-==== Setup rapido
+### Setup rapido
 
 #include "AsyncHTTPClientLight.h"
 
 Per abilitare il debug:
-
-cpp
+```cpp
 #define ASYNC_HTTP_DEBUG
 #define ASYNC_HTTP_LOG_SPIFFS // oppure ASYNC_HTTP_LOG_SD
-
+```
 
 
 🧪 Esempio asincrono
