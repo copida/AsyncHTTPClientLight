@@ -51,22 +51,23 @@ Esempi inclusi: GET, POST, HTTPS, AsyncTestServer
 - Assicurati di avere WiFiClientSecure per HTTPS
 
 ## Setup rapido
+```cpp
 #include "AsyncHTTPClientLight.h"
 
 AsyncHTTPClientLight client;
 client.beginRequest("http://example.com/data", "POST", jsonPayload);
 
-
-Nel loop():
+void loop();
 client.poll();
 
 if (client.isFinished()) {
   Serial.println(client.getResponse());
 }
-
+```
 
 ## Modalità sincrona
-NO: client.poll();
+```cpp
+//NO: client.poll();
 
 int codhttp = client.runSync("http://example.com/data", "GET", "");
 
@@ -75,14 +76,16 @@ if (codhttp == 200) {
   Serial.println(client.getResponse());
   
 }
-
+```
 
 ## Modalità Mista
+```cpp
+void loop(){
 client.poll();
 
-La funzione runSync() rileva se è in corso una richiesta asincrona
- e la porta a termine attivamente prima di avviare la propria.
-
+//La funzione runSync() rileva se è in corso una richiesta asincrona
+// e la porta a termine attivamente prima di avviare la propria.
+```
 
 --------------------------------------------------------------------
 
@@ -130,12 +133,13 @@ es: tipica callback...
 ```
 ---------------------------------------------------
 🔐 HTTPS
-
+```cpp
 WiFiClientSecure secureClient;
 
 secureClient.setInsecure(); // oppure setCACert(...)
 
 client.setClient(&secureClient);
+```
 --------------------------------------------------
 
 
@@ -171,28 +175,33 @@ Per abilitare il debug:
 
 
 🧪 Esempio asincrono
-cpp
+```cpp
 client.addTitle("📦 Invio dati sensore");
 client.beginRequest("https://api.example.com/data", "POST", jsonPayload);
 Nel loop():
 
-cpp
 client.poll();
 if (client.isFinished()) {
   // Richiesta completata
 }
+```
 
 💾 Logging su file
-cpp
+```cpp
 client.setLogToFile(true); // Salva su SPIFFS o SD
+```
 Il file http_log.txt viene creato automaticamente nella root e contiene:
+```txt
 Code
 [REQ 1] === Invio dati sensore ===
 [REQ 1] Inizio richiesta POST a https://api.example.com/data
 [REQ 1] Richiesta completata
+```
 
 ## HTTPS supportato
+```cpp
 secureClient.setInsecure(); // oppure setCACert(...) per certificati validi
+```
 ------------------------------------------------------------------------
 
 ## Tips & Traps
