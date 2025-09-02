@@ -222,8 +222,8 @@ Debug? Usa Serial.println(client.getStatusCode()); per vedere cosa succede.
 
 🔄 Retry su http://example.com/fail
 
-===============================================================================
-🧠 Note finali
+-------------------------------------------------------
+## Note finali
 Questa libreria è pensata per essere leggera, affidabile e facilmente integrabile in progetti embedded.
  Ogni funzione è progettata per offrire controllo senza complicazioni,
  e ogni log è pensato per aiutarti a capire cosa succede sotto il cofano.
