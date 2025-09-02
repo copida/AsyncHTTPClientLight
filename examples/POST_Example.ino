@@ -9,27 +9,40 @@ AsyncHTTPClientLight client;
 void setup() {
   Serial.begin(115200);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) delay(500);
-  Serial.println("WiFi connesso");
+  Serial.print("Connessione WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(" connesso!");
+  Serial.println(WiFi.localIP());
 
-  client.setDebug(true); // Attiva il debug (solo se ASYNC_HTTP_DEBUG è definito)
+  // Configurazione client
+  client.setDebug(true);
+  client.setLogToFile(true);
+  client.setMaxRetries(3);
+  client.setTimeout(8000);
 
-  client.onRequestComplete([](int code, String body) {
-    Serial.println("Risposta POST ricevuta:");
-    Serial.println("Codice: " + String(code));
-    Serial.println("Body:\n" + body);
+  // Callback unificato
+  client.onEvent([](HTTPEventType type, const String& msg) {
+    Serial.printf("[EVENTO %d] %s\n", type, msg.c_str());
   });
 
-  client.onError([](String err) {
-    Serial.println("Errore: " + err);
-  });
+  // Header personalizzati
+  client.addHeader("Authorization", "Bearer xyz123");
+  client.addHeader("Custom-Header", "DavidePower");
 
-  String json = "{\"title\":\"CopiNet\",\"body\":\"Ciao Davide!\",\"userId\":1}";
+  // Titolo per logging
+  client.addTitle("Richiesta GET iniziale");
 
-  client.beginRequest("https://jsonplaceholder.typicode.com/posts", "POST", json);
-  client.addHeader("Content-Type", "application/json");
+  // Avvio richiesta asincrona
+  client.beginRequest("http://httpbin.org/get", "GET", "");
 }
 
 void loop() {
   client.poll();
+  if (client.isFinished()) {
+    Serial.println("Risposta ricevuta:");
+    Serial.println(client.getLastResponseBody());
+  }
 }
