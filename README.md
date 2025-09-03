@@ -82,6 +82,10 @@ if (codhttp == 200) {
 ```cpp
 void loop(){
 client.poll();
+//.....
+client.beginRequest("http://example.com/data", "POST", jsonPayload);
+int codhttp = client.runSync("http://example.com/data", "GET", "");
+if(codhtto != 200)....
 
 //La funzione runSync() rileva se è in corso una richiesta asincrona
 // e la porta a termine attivamente prima di avviare la propria.
