@@ -154,6 +154,43 @@ HTTPEventType::Overload	Richiesta già in corso.
     }
   });
 ```
+es: callback completa...
+```cpp
+void handleHTTPEvent(HTTPEventType type, const HTTPResponse *res) {
+  switch (type) {
+    case HTTPEventType::Response:
+      Serial.println("\n✅==== Risposta ricevuta:");
+      Serial.printf("Titol: %s\n", res->inprogressTitle);
+      Serial.printf("Codice HTTP: %d\n", res->statusCode);
+      Serial.printf("Lenght: %d   Type: %s\n", res->contentLength, res->contentType);
+      if (strlen(client.getResponsePayload()) > 0) Serial.println(client.getResponsePayload());
+      if (strlen(res->msg_error) > 0 || res->statusCode != 200) {
+        Serial.print("❌====ERRORE: ");
+        Serial.println(res->msg_error);
+        //.....registro
+      }
+      break;
+    case HTTPEventType::Error:
+      Serial.println("❌==== ERRORE:");
+      Serial.print("Errore: ");
+      Serial.println(res->msg_error);
+      break;
+    case HTTPEventType::Timeout:
+      Serial.println("⏱ ==== TIMEOUT:");
+      Serial.printf("Titol: %s\n", res->inprogressTitle);
+      break;
+    case HTTPEventType::Overload:
+      Serial.println("⚠️ ===== Overload ignorata: ");
+      Serial.println(res->msg_error);
+      break;
+    case HTTPEventType::Chunk:
+      Serial.println("\n======== CHUNK:");
+      Serial.printf("Chunk Lung: %d\nval: %s", res->expectedLength, res->ptr_workbuffer);
+      break;
+  }
+  Serial.println("====== END =====");
+}
+```
 ---------------------------------------------------
 🔐 HTTPS
 ```cpp
