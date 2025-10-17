@@ -132,11 +132,11 @@ Struttura response:
 ##  CALLBACK UNIFICATA ###############
 es: tipica callback...
 🔄 Eventi supportati (callback)
-Evento	Descrizione
-HTTPEventType::Response	Risposta HTTP ricevuta
-HTTPEventType::Error	Timeout, connessione fallita
-HTTPEventType::Chunk	Dati chunk ricevuti (parziale)
-HTTPEventType::Overload	Richiesta già in corso
+Evento	Descrizione:.
+HTTPEventType::Response	Risposta HTTP ricevuta.
+HTTPEventType::Error	Timeout, connessione fallita.
+HTTPEventType::Chunk	Dati chunk ricevuti (parziale).
+HTTPEventType::Overload	Richiesta già in corso.
 
 ```cpp
     http.onEvent(HTTPEventType type, const HTTPResponse *res) {
