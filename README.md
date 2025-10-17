@@ -55,13 +55,15 @@ Esempi inclusi: GET, POST, HTTPS, AsyncTestServer
 #include "AsyncHTTPClientLight.h"
 
 AsyncHTTPClientLight client;
+client.onEvent(handleHTTPEvent);
+
 client.beginRequest("http://example.com/data", "POST", jsonPayload);
 
 void loop();
 client.poll();
 
 if (client.isFinished()) {
-  Serial.println(client.getResponse());
+  Serial.println(client.getLastHTTPcode());
 }
 ```
 
@@ -69,13 +71,18 @@ if (client.isFinished()) {
 ```cpp
 //NO: client.poll();
 
-int codhttp = client.runSync("http://example.com/data", "GET", "");
+//HTTPS POST sincrona
+void testSync() {
+  http.setDebug(true);
+  http.addTitle("Test POST Sync");
 
-if (codhttp == 200) {
+  const char* payload = "{\"name\":\"ESP32\"}";
+  int status = http.runSync("https://httpbin.org/post", "POST", payload);
 
+  Serial.printf("Codice HTTP: %d\n", http.getLastHTTPcode());
   Serial.println(client.getResponse());
-  
 }
+
 ```
 
 ## Modalità Mista
@@ -97,12 +104,11 @@ if(codhttp != 200)....
 
 | Funzione                          | Descrizione                           |
 |-----------------------------------|---------------------------------------|
-| beginRequest(url,method, payload) | Avvia una richiesta asincrona         | 
+| beginRequest(url,method, payload) | Avvia una richiesta asincrona         |
 | runSync(url, method, payload)     | Avvia una richiesta asincrona         |
 | poll()                            | Gestisce lo stato interno             |
 | isFinished()                      | Verifica se la richiesta è completata |
-| getResponse()                     | Restituisce il corpo della risposta   |
-| getStatusCode()                   | Restituisce il codice HTTP            |
+| getLastHTTPcode()                 | Restituisce il codice HTTP            |
 | onEvent(callback)                 | Callback per eventi HTTP              |
 | addTitle("Titolo")                | Etichetta per logging                 |
 | setTimeout(millis)                | imposta Timeout richieste             |
@@ -110,30 +116,31 @@ if(codhttp != 200)....
 | setLogToFile(true)                | Attiva log su SPIFFS o SD             |
 | setMaxRetries(3)                  | Num. tentativi x timeout (default 1)  |
 
+Struttura response:
+
+| Nome                              | Descrizione                           |
+|-----------------------------------|---------------------------------------|
+| int statusCode                    | risposta codice HTTP, -1 se errore    |
+| char* inprogressTitle             | Titolo Richiesta                      |
+| char* contentType                 | Type content                          |
+| int contentLength                 | Lunghezza payload                     |
+| char* ptr_workbuffer              | Puntatore risposta                    |
+| char msg_error                    | Messaggi Errori                       |
+
 
 ##  CALLBACK UNIFICATA ###############
 es: tipica callback...
 ```cpp
-    client.onEvent([](HTTPEventType type, const String& msg) {
-    switch (type) {
-    case HTTPEventType::Response:
-      Serial.println("Risposta ricevuta: " + msg);
-      Serial.println("Codice HTTP: " + String(client.getLastHTTPcode()));
-      break;
-    case HTTPEventType::Timeout:
-      Serial.println("Timeout: " + msg);
-      break;
-    case HTTPEventType::Error:
-      Serial.println("Errore: " + msg);
-      break;
-    case HTTPEventType::Chunk:
-      Serial.println("Chunk ricevuto: " + msg);
-      break;
-    case HTTPEventType::Overload:
-      Serial.println("Richiesta ignorata: " + msg);
-      break;
+    http.onEvent(HTTPEventType type, const HTTPResponse *res) {
+    if (type == HTTPEventType::Response) {
+      Serial.printf("Status: %d\n", res->statusCode);
+      Serial.println("Payload:");
+      Serial.println(res->ptr_outbuffer); // Contenuto ricevuto
     }
-    });
+    if (type == HTTPEventType::Error) {
+      Serial.printf("Errore: %s\n", res->msg_error);
+    }
+  });
 ```
 ---------------------------------------------------
 🔐 HTTPS
