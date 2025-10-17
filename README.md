@@ -227,10 +227,14 @@ La libreria è progettata per funzionare in ambienti misti:
 
 #include "AsyncHTTPClientLight.h"
 
-Per abilitare il debug:
+Per abilitare il debug (AsyncHTTPClientLight.cpp):
 ```cpp
 #define ASYNC_HTTP_DEBUG 1
 #define ASYNC_HTTP_LOG_SPIFFS // oppure ASYNC_HTTP_LOG_SD
+```
+Disabilitazione debug dalla compilazione (less -3kb):
+```cpp
+#define ASYNC_HTTP_DEBUG 0
 ```
 
 
