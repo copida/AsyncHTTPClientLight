@@ -40,12 +40,12 @@ AsyncHTTPClientLight::AsyncHTTPClientLight() {
 	
 	sprintf(response.contentType,"application/octet-stream"); // default
 	response.expectedLength = -1;
-  response.contentLength = 0;
-  response.isChunked = false;
+  	response.contentLength = 0;
+  	response.isChunked = false;
 	response.statusCode = -1;
 	responsePayloadBuffer = lineBuffer;
 	responsePayloadMaxLen = sizeof(lineBuffer);
-  response.ptr_workbuffer = PATHBUFFER;
+  	response.ptr_workbuffer = PATHBUFFER;
 }
 
 void AsyncHTTPClientLight::triggerEvent(HTTPEventType type, const char* data) {
@@ -139,9 +139,9 @@ void AsyncHTTPClientLight::reset() {
 	bufIndex = 0;
 	
 	// Resetta struttura response
-  memset(&response, 0, sizeof(response));
-  response.statusCode = -1;
-  response.contentLength = 0;
+  	memset(&response, 0, sizeof(response));
+  	response.statusCode = -1;
+  	response.contentLength = 0;
 	response.expectedLength = -1;
 	response.isStream = false;
 	response.isChunked = false;
@@ -318,7 +318,6 @@ void AsyncHTTPClientLight::poll() {
 		//startTime = millis();
 		//while (!client->available() && millis() - startTime < timeoutMs) {
 		//vTaskDelay(pdMS_TO_TICKS(10));  // Ritardo di 10ms
-		//delay(10);
 		//}
 		if (!_isSyncMode) vTaskDelay(pdMS_TO_TICKS(10)); 
 		if (client->available()) receiving();
@@ -335,10 +334,6 @@ void AsyncHTTPClientLight::checktimeout() {
 		if(retryCount < maxRetries){
 			triggerEvent(HTTPEventType::Error, logPrefix + "Timeout");
 		}
-		// else{
-		// if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
-		// }
-		
 		
 		client->stop();
 		retryCount++;
@@ -655,113 +650,113 @@ void AsyncHTTPClientLight::parseHeaders(){
 		if(lineBuffer[0] == '/'){					// PATHBUFFER relativo
 			snprintf(PATHBUFFER, sizeof(PATHBUFFER),"%s", lineBuffer);
 			}else{
-			parseURL(lineBuffer);
+		parseURL(lineBuffer);
 		}
 		return;
-	}
-	
-	
-	if (search_strbuf(lineBuffer, "Content-Type:") == 0) {
+		}
+		
+		
+		if (search_strbuf(lineBuffer, "Content-Type:") == 0) {
 		trimmer(lineBuffer, 14);
 		snprintf(response.contentType, sizeof(response.contentType),"%s", lineBuffer );
-	}
-	else if (search_strbuf(lineBuffer, "Content-Length:") == 0) {
+		}
+		else if (search_strbuf(lineBuffer, "Content-Length:") == 0) {
 		trimmer(lineBuffer, 16);
 		response.contentLength = atoi(lineBuffer);
 		response.isStream = true;
-	}
-	
-}
-//------------------------------------
-int AsyncHTTPClientLight::readUntilTerminator(Stream* client, char* buffer, size_t maxLen, char terminator, unsigned long timeoutMs, bool delCR) {
-	size_t index = 0;
-	unsigned long start = millis();
-	bool isdati = false;
-	
-	while (millis() - start < timeoutMs && index < maxLen - 1) {
+		}
+		
+		}
+		//------------------------------------
+		int AsyncHTTPClientLight::readUntilTerminator(Stream* client, char* buffer, size_t maxLen, char terminator, unsigned long timeoutMs, bool delCR) {
+		size_t index = 0;
+		unsigned long start = millis();
+		bool isdati = false;
+		
+		while (millis() - start < timeoutMs && index < maxLen - 1) {
 		if (client->available()) {
-			char c = client->read();
-			isdati = true;
-			if (c == '\r'){
-				if (delCR)continue;	// ignora il carriage return
-			}
-			if (c == terminator) break;	
-			buffer[index++] = c;
+		char c = client->read();
+		isdati = true;
+		if (c == '\r'){
+		if (delCR)continue;	// ignora il carriage return
 		}
-	}
-	
-	buffer[index] = '\0';
-	
-	if (index == 0 && millis() - start >= timeoutMs && !isdati) {
+		if (c == terminator) break;	
+		buffer[index++] = c;
+		}
+		}
+		
+		buffer[index] = '\0';
+		
+		if (index == 0 && millis() - start >= timeoutMs && !isdati) {
 		return -1; // timeout senza dati
-	}
-	
-	return index; // numero di caratteri letti
-}
-//-----------------------------------
-void AsyncHTTPClientLight::releasePayload() {
-	
-	if(!payloadAllocated) return;
-	if (payloadAllocated && ptr_Inpayload) {
-		free(ptr_Inpayload);
-		ptr_Inpayload = nullptr;
-		payloadAllocated = false;
-		log("Payload liberato");
-	}
-}
-
-//-------------------------------------------------
-// FUNZIONE TRIMMER toglie spazi iniziali e finali da un buffer
-int AsyncHTTPClientLight::trimmer(char* buftrim,  int dadove) {
-	
-	int s = dadove;
-	int e = 0;
-	int _last_ch = 0;
-	
-	if (buftrim[0] == '\0') return _last_ch;
-	do {
-		if (buftrim[s] == ' ' && _last_ch == 0) {  //tolgo spazi iniziali
-			s++;
-			} else {
-			buftrim[e] = buftrim[s];
-			if (buftrim[e] != ' ') _last_ch = e;  // ultima lettera valida
-			s++;
-			e++;
 		}
-	} while (buftrim[s] != '\0');
-	
-	buftrim[_last_ch + 1] = '\0';
-	return _last_ch;
-}
-
-// cerca una stringa nel buffer e ritorna la posizione.. -1 se non trova
-int AsyncHTTPClientLight::search_strbuf(const char* buffer, char* str_cmp, int fromwhere) {
-	
-	int t = fromwhere;
-	int x = 0;
-	int pos = -1;
-	//bool findok = false;
-	
-	while (str_cmp[x] != '\0' && buffer[t] != '\0') {
+		
+		return index; // numero di caratteri letti
+		}
+		//-----------------------------------
+		void AsyncHTTPClientLight::releasePayload() {
+		
+		if(!payloadAllocated) return;
+		if (payloadAllocated && ptr_Inpayload) {
+			free(ptr_Inpayload);
+			ptr_Inpayload = nullptr;
+			payloadAllocated = false;
+			log("Payload liberato");
+		}
+		}
+		
+		//-------------------------------------------------
+		// FUNZIONE TRIMMER toglie spazi iniziali e finali da un buffer
+		int AsyncHTTPClientLight::trimmer(char* buftrim,  int dadove) {
+		
+		int s = dadove;
+		int e = 0;
+		int _last_ch = 0;
+		
+		if (buftrim[0] == '\0') return _last_ch;
+		do {
+		if (buftrim[s] == ' ' && _last_ch == 0) {  //tolgo spazi iniziali
+		s++;
+		} else {
+		buftrim[e] = buftrim[s];
+		if (buftrim[e] != ' ') _last_ch = e;  // ultima lettera valida
+		s++;
+		e++;
+		}
+		} while (buftrim[s] != '\0');
+		
+		buftrim[_last_ch + 1] = '\0';
+		return _last_ch;
+		}
+		
+		// cerca una stringa nel buffer e ritorna la posizione.. -1 se non trova
+		int AsyncHTTPClientLight::search_strbuf(const char* buffer, char* str_cmp, int fromwhere) {
+		
+		int t = fromwhere;
+		int x = 0;
+		int pos = -1;
+		//bool findok = false;
+		
+		while (str_cmp[x] != '\0' && buffer[t] != '\0') {
 		
 		do {
-			if (buffer[t] != str_cmp[x]) {
-				t++;
-				pos = -1;
-				//findok = false;
-				x = 0;
-				} else {
-				//if(!findok) pos = t;
-				if(pos == -1)pos = t;
-				//findok = true;
-				x++;
-				t++;
-				break;
-			}
+		if (buffer[t] != str_cmp[x]) {
+		t++;
+		pos = -1;
+		//findok = false;
+		x = 0;
+		} else {
+		//if(!findok) pos = t;
+		if(pos == -1)pos = t;
+		//findok = true;
+		x++;
+		t++;
+		break;
+		}
 		} while (str_cmp[x] != '\0' && buffer[t] != '\0');
 		
-	}
-	
-	return pos;
-	
-}																																											
+		}
+		
+		return pos;
+		
+		}																																													
