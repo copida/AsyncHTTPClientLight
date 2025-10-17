@@ -91,7 +91,7 @@ void loop(){
 client.poll();
 //.....
 client.beginRequest("http://example.com/data", "POST", jsonPayload);
-int codhttp = client.runSync("http://example.com/data", "GET", "");
+int codhttp = client.runSync("http://example.com/data", "GET");
 if(codhttp != 200)....
 
 //La funzione runSync() rileva se è in corso una richiesta asincrona
@@ -108,6 +108,7 @@ if(codhttp != 200)....
 | runSync(url, method, payload)     | Avvia una richiesta asincrona         |
 | poll()                            | Gestisce lo stato interno             |
 | isFinished()                      | Verifica se la richiesta è completata |
+| setResponsePayload(char* buffer, size_t maxLen)| Set Buffer esterno per payload|
 | getLastHTTPcode()                 | Restituisce il codice HTTP            |
 | onEvent(callback)                 | Callback per eventi HTTP              |
 | addTitle("Titolo")                | Etichetta per logging                 |
@@ -130,6 +131,13 @@ Struttura response:
 
 ##  CALLBACK UNIFICATA ###############
 es: tipica callback...
+🔄 Eventi supportati (callback)
+Evento	Descrizione
+HTTPEventType::Response	Risposta HTTP ricevuta
+HTTPEventType::Error	Timeout, connessione fallita
+HTTPEventType::Chunk	Dati chunk ricevuti (parziale)
+HTTPEventType::Overload	Richiesta già in corso
+
 ```cpp
     http.onEvent(HTTPEventType type, const HTTPResponse *res) {
     if (type == HTTPEventType::Response) {
@@ -180,7 +188,7 @@ La libreria è progettata per funzionare in ambienti misti:
 
 Per abilitare il debug:
 ```cpp
-#define ASYNC_HTTP_DEBUG
+#define ASYNC_HTTP_DEBUG 1
 #define ASYNC_HTTP_LOG_SPIFFS // oppure ASYNC_HTTP_LOG_SD
 ```
 
