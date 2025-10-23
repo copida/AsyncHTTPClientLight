@@ -29,7 +29,7 @@ Compatibile con WiFiClientSecure per HTTPS
 Esempi inclusi: GET, POST, HTTPS, AsyncTestServer
 
 
- progettata per richieste GET/POST non bloccanti,
+ progettata per richieste GET/POST PUT DELETE non bloccanti,
  con supporto a redirect, chunked transfer, header personalizzati e logging modulare.
 
 
