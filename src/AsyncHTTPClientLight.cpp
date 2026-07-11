@@ -7,6 +7,7 @@
 	
 	#define ASYNC_HTTP_LOG_SD
 	//#define ASYNC_HTTP_LOG_SPIFFS
+	//#define ASYNC_HTTP_LOG_LittleFS
 	//#define MAXSIZEFILE_LOG 51200
 	#define MAXSIZEFILE_LOG 512000
 	
@@ -20,6 +21,13 @@
 		#include <SD.h>
 		#define FS_LOG SD
 		#pragma message "### AsyncHTTPClientLight: Funzionalità 'SD' incluse. ###"
+	#endif
+	
+	#ifdef ASYNC_HTTP_LOG_LittleFS
+		#include <FS.h>
+		#include <LittleFS.h>
+		#define FS_LOG LittleFS
+		#pragma message "### AsyncHTTPClientLight: Funzionalità 'LittleFS' incluse. ###"
 	#endif
 	
 	#else
@@ -40,12 +48,12 @@ AsyncHTTPClientLight::AsyncHTTPClientLight() {
 	
 	sprintf(response.contentType,"application/octet-stream"); // default
 	response.expectedLength = -1;
-  	response.contentLength = 0;
-  	response.isChunked = false;
+  response.contentLength = 0;
+  response.isChunked = false;
 	response.statusCode = -1;
 	responsePayloadBuffer = lineBuffer;
 	responsePayloadMaxLen = sizeof(lineBuffer);
-  	response.ptr_workbuffer = PATHBUFFER;
+  response.ptr_workbuffer = PATHBUFFER;
 }
 
 void AsyncHTTPClientLight::triggerEvent(HTTPEventType type, const char* data) {
@@ -59,9 +67,12 @@ void AsyncHTTPClientLight::triggerEvent(HTTPEventType type, const String& messag
 	triggerEvent(type, message.c_str());
 }
 
-
 void AsyncHTTPClientLight::setMaxRetries(int retries) {
 	if (retries >= 1) maxRetries = retries;
+}
+
+void AsyncHTTPClientLight::setmaxRedirects(int ndirect) {
+	if (ndirect >= 1) maxRedirects = ndirect;
 }
 
 
@@ -77,7 +88,7 @@ void AsyncHTTPClientLight::setDebug(bool enabled) {
 		//String fullMsg = logPrefix + msg;
 		
 		if (debugEnabled) Serial.println(logPrefix + msg);
-		#if defined(ASYNC_HTTP_LOG_SPIFFS) || defined(ASYNC_HTTP_LOG_SD)
+		#if defined(ASYNC_HTTP_LOG_SPIFFS) || defined(ASYNC_HTTP_LOG_SD) || defined(ASYNC_HTTP_LOG_LittleFS)
 			if (logToFile) {
 				
 				File f = FS_LOG.open(logFile, FILE_APPEND);
@@ -108,9 +119,9 @@ void AsyncHTTPClientLight::setDebug(bool enabled) {
 		
 		#if defined(ASYNC_HTTP_LOG_SPIFFS) || defined(ASYNC_HTTP_LOG_SD)
 			if (enabled && !FS_LOG.begin(true)) {
-				log("FS_LOG non inizializzato");
+				log("[HTTP]FS_LOG non inizializzato");
 				}else{
-				log("FS_LOG inizializzato");
+				log("[HTTP]FS_LOG inizializzato");
 			}
 		#endif
 		
@@ -122,9 +133,6 @@ int AsyncHTTPClientLight::getLastHTTPcode() const {
 	return response.statusCode;
 }
 
-// String AsyncHTTPClientLight::getLastTitle() const {
-// return String(response.inprogressTitle);
-// }
 
 void AsyncHTTPClientLight::reset() {
 	client = nullptr;
@@ -139,9 +147,9 @@ void AsyncHTTPClientLight::reset() {
 	bufIndex = 0;
 	
 	// Resetta struttura response
-  	memset(&response, 0, sizeof(response));
-  	response.statusCode = -1;
-  	response.contentLength = 0;
+  memset(&response, 0, sizeof(response));
+  response.statusCode = -1;				// codice ritorno http
+  response.contentLength = 0;
 	response.expectedLength = -1;
 	response.isStream = false;
 	response.isChunked = false;
@@ -187,16 +195,25 @@ void AsyncHTTPClientLight::addTitle(const String& title) {
 	snprintf(pendingTitle, sizeof(pendingTitle),"%s", title.c_str());
 }
 
+
+/**
+	* @brief Esegue una richiesta HTTP sincrona.
+	* @param url URL completo della richiesta.
+	* @param method Metodo HTTP (GET, POST...).
+	* @param payload Corpo della richiesta (solo per POST/PUT).
+	* @return Codice di stato HTTP ricevuto.
+*/
 int AsyncHTTPClientLight::runSync(const char* url, const char* methodGET, const char* payload) {
 	// aspetto se eventualmente c'è una richiesta asincrona in corso la porto a termine
 	if(!finished){
 		log("Wait end Asincrona : " + String(response.inprogressTitle));
 		log("Pending Sincrona : " + String(pendingTitle));
-	}
-	
-	while(!finished){
-		vTaskDelay(pdMS_TO_TICKS(10));
-		poll();
+		//}
+		
+		while(!finished){
+			vTaskDelay(pdMS_TO_TICKS(10));
+			poll2();
+		}
 	}
 	
 	_isSyncMode = true;
@@ -208,7 +225,7 @@ int AsyncHTTPClientLight::runSync(const char* url, const char* methodGET, const 
 	while (!isFinished()) {
 		vTaskDelay(pdMS_TO_TICKS(10));
 		//delay(100);
-		poll();
+		poll2();
 	}
 	
 	// clean
@@ -246,8 +263,9 @@ void AsyncHTTPClientLight::beginRequest(const char* url, const char* method_, co
 	
 	if (!parseURL(url)) {
 		finished = true;
-		log("ERRORE URL non valido");
-		snprintf(response.msg_error, sizeof(response.msg_error), "URL non valido");
+		//log("ERRORE URL non valido");
+		snprintf(response.msg_error, sizeof(response.msg_error), "ERRORE URL non valido");
+		log(response.msg_error);
 		if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
 		//triggerEvent(HTTPEventType::Error, logPrefix + "URL non valido");
 		return;
@@ -257,7 +275,7 @@ void AsyncHTTPClientLight::beginRequest(const char* url, const char* method_, co
 	
 	if (!_isSyncMode && payload_ != nullptr) {
 		//Serial.println("payload da allocare");
-		// questa funzione server per fare una copia del payload in spazio memoria allocata in 
+		// questa funzione serve per fare una copia del payload in spazio memoria allocata in 
 		// caso di richieta asincrona e che il payload sia locale alla funzione chiamante
 		// perdita del puntatore --  a meno che sia dichiarato globalmente
 		size_t len = strlen(payload_);
@@ -280,6 +298,7 @@ void AsyncHTTPClientLight::beginRequest(const char* url, const char* method_, co
 	state = CONNECTING;
 	
 	lastActivity = millis();
+	response.restime = lastActivity;
 	finished = false;
 }
 
@@ -300,7 +319,7 @@ bool AsyncHTTPClientLight::isFinished() {
 	return finished;
 }
 
-void AsyncHTTPClientLight::poll() {
+void AsyncHTTPClientLight::poll2() {
 	//unsigned long startTime;
 	//  if (finished || !client) return;
 	if (finished || state == IDLE) return;
@@ -318,6 +337,7 @@ void AsyncHTTPClientLight::poll() {
 		//startTime = millis();
 		//while (!client->available() && millis() - startTime < timeoutMs) {
 		//vTaskDelay(pdMS_TO_TICKS(10));  // Ritardo di 10ms
+		//delay(10);
 		//}
 		if (!_isSyncMode) vTaskDelay(pdMS_TO_TICKS(10)); 
 		if (client->available()) receiving();
@@ -327,12 +347,18 @@ void AsyncHTTPClientLight::poll() {
 	}
 }
 
+// in caso di TASK freeRTOS e richiesta runSync in corso non esegue il poll dall'esterno(loop)
+void AsyncHTTPClientLight::poll(){
+	if(_isSyncMode)return;
+	poll2();
+}
+
 void AsyncHTTPClientLight::checktimeout() {
 	if (millis() - lastActivity > timeoutMs) {
 		log("Timeout");
-		snprintf(response.msg_error, sizeof(response.msg_error),"Timeout");
-		if(retryCount < maxRetries){
-			triggerEvent(HTTPEventType::Error, logPrefix + "Timeout");
+		snprintf(response.msg_error, sizeof(response.msg_error),"Timeout %d", retryCount);
+		if(retryCount <= maxRetries){		// se non supero maxRetries solo messaggio
+			triggerEvent(HTTPEventType::Timeout, logPrefix + "Timeout"  + String(retryCount));
 		}
 		
 		client->stop();
@@ -345,25 +371,26 @@ void AsyncHTTPClientLight::checktimeout() {
 
 void AsyncHTTPClientLight::connecting() {
 	
-	if (retryCount > maxRetries || redirectCount > maxRedirects){
-		//client->stop();
+	//if (retryCount > maxRetries || redirectCount > maxRedirects){
+	if (retryCount > maxRetries){
+		
 		releasePayload();
 		
-		if(redirectCount > maxRedirects){
-			snprintf(response.msg_error, sizeof(response.msg_error), "Too many redirection");
-			if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
-			//if (unifiedCallback) unifiedCallback(HTTPEventType::Response, "Too many redirection");
-		}
+		// if(redirectCount > maxRedirects){
+		// snprintf(response.msg_error, sizeof(response.msg_error), "Too many redirection");
+		// log(response.msg_error);
+		// if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
+		// }
 		
 		
 		if (retryCount > maxRetries){
-			snprintf(response.msg_error, sizeof(response.msg_error), "Superato num tentativi");
+			snprintf(response.msg_error, sizeof(response.msg_error), "Superato num tentativi: %d", retryCount);
+			log(response.msg_error);
 			if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
-			//if (unifiedCallback) unifiedCallback(HTTPEventType::Response, "Superato num tentativi", -1);
 		}
 		
-		// retryCount = 1;
-		// redirectCount = 0;
+		response.restime = (millis() - response.restime);
+		log("Tempo:" + String(response.restime));
 		finished = true;
 		state = IDLE;
 		return;
@@ -375,10 +402,15 @@ void AsyncHTTPClientLight::connecting() {
 	if (useSSL) secureClient.setInsecure();
 	//  log("Client creato puntatore: " + String((uintptr_t)client));
 	
-	if(retryCount == 1 && redirectCount == 1){
+	
+	//if(retryCount == 1 && redirectCount == 1){
+	if(redirectCount > 0){
 		log("REDIRECT..");
+		log("Host: " + String(host));
+		log("Path: " + String(PATHBUFFER));
 	}
-	log("Tentativo n:" + String(retryCount));
+	log("Tentativo n:" + String(retryCount) );
+	
 	
 	if (client->connect(host, port)) {
 		state = SENDING;
@@ -389,6 +421,7 @@ void AsyncHTTPClientLight::connecting() {
 		client->stop();
 		log("Connessione fallita");
 		retryCount++;
+		lastActivity = millis();
 		state = CONNECTING;
 		
 	}
@@ -396,32 +429,30 @@ void AsyncHTTPClientLight::connecting() {
 
 void AsyncHTTPClientLight::sending() {
 	
-	// Serial.println("=== HEADER LIST ===");
-	// for (auto& h : inprogressHeaders) {
-	// Serial.println(h.first + ": " + h.second);
-	// }
-	// Serial.println("===================");
-	
 	int x = 0;
 	
 	//Serial.println(ptr_Inpayload);
 	//Serial.println((unsigned long)&ptr_Inpayload, HEX);
-	
+	log("Sending..");
   snprintf(lineBuffer, sizeof(lineBuffer), "%s %s HTTP/1.1\r\n", method, PATHBUFFER);
+	log(lineBuffer);
   client->print(lineBuffer);
 	
 	
   // Host header
   snprintf(lineBuffer, sizeof(lineBuffer), "Host: %s\r\n", host);
+	log(lineBuffer);
   client->print(lineBuffer);
 	
 	//headers
 	for (auto& h : inprogressHeaders) {
 		//Serial.println("headers trovato");
+		//log("aggiungo headers");//
+		log(h.first + ": " + h.second + "\r\n");//
 		client->print(h.first + ": " + h.second + "\r\n");
 	}
 	
-  if(ptr_Inpayload != nullptr){
+  if(ptr_Inpayload != nullptr && redirectCount == 0){
 		
 		x = strlen(ptr_Inpayload);
 		snprintf(lineBuffer, sizeof(lineBuffer), "Content-Length: %d\r\n", x);
@@ -435,7 +466,7 @@ void AsyncHTTPClientLight::sending() {
 	
 	log("SHIPPED: " + (String(ptr_Inpayload != nullptr ? ptr_Inpayload : "done")));
 	
-	
+	headersParsed = false;
 	state = RECEIVING;
 	lastActivity = millis();
 	//client->flush();
@@ -447,38 +478,100 @@ void AsyncHTTPClientLight::receiving() {
 	
 	if(!headersParsed){
 		
-		
 		while (client->available()) {
 			lastActivity = millis();
-			//while (millis() - lastActivity < timeoutMs && !headersParsed) {
 			len = readUntilTerminator(client, lineBuffer, sizeof(lineBuffer)-1, '\n', timeoutMs);
 			if (len < 0) break;
+			
+			// if (len < 0) {
+			// log("Errore o Timeout durante la lettura degli header");
+			// client->stop();
+			// retryCount++;
+			// state = CONNECTING; // Ripensa la connessione o dichiara FINISHED se superi i tentativi
+			// return;
+			// }
+			
 			
 			// Fine degli header
 			if (strlen(lineBuffer) > 0){
 				parseHeaders();
+				if(headersParsed)break;
 				} else{
 				log("Fine header");
 				headersParsed = true;
 				break;
 			}
 		}
-		// if(millis() - lastActivity > timeoutMs && !headersParsed){
-		// triggerEvent(HTTPEventType::Error, logPrefix + "Timeout");
-		// return;
-		// }
-		if(!headersParsed)return;
+		
+		// lascio il tempo ad altre funzioni poi ritorno mentre aspetto altri header
+		// fino a quando trovo un header vuoto
+		if(!headersParsed)return;			
 	}
 	
+	response.msg_error[0] = '\0';		// reset errori precednti
 	
-	if (response.statusCode == 301 || response.statusCode == 302 || response.statusCode == 307) {
+	// --- Gestione redirect HTTP --------------------------------------------
+	if (response.statusCode >= 300 && response.statusCode <= 308) {
+		
+    // Copia il nuovo URL o path relativo
+    //if (search_strbuf(lineBuffer, "Location:") == 0) {
 		client->stop();
 		headersParsed = false;
-		response.contentLength = 0;
+		//response.contentLength = 0;
+		//inprogressHeaders.clear();
 		redirectCount++;
-		retryCount = 1;
-		state = CONNECTING;
-		return;
+		
+		if(redirectCount > maxRedirects){
+			snprintf(response.msg_error, sizeof(response.msg_error), "Too many redirection");
+			log(response.msg_error);
+			if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
+			response.restime = (millis() - response.restime);
+			log("Tempo:" + String(response.restime));
+			finished = true;
+			state = IDLE;
+			return;
+		}
+		//gia fatto da parseHeaders
+		// trimmer(lineBuffer, 9);	
+		// if (lineBuffer[0] == '/') {
+		// snprintf(PATHBUFFER, sizeof(PATHBUFFER), "%s", lineBuffer);
+		// } else {
+		// parseURL(lineBuffer);
+		// }
+		//}
+		
+		
+    // Comportamento conforme a RFC 7231
+    switch (response.statusCode) {
+			case 301:
+			case 302:
+			releasePayload();   // il vecchio payload non serve più
+			method = "GET";
+			case 303:
+			// Questi status implicano GET nella nuova richiesta
+			//if (strcmp(method, "GET") != 0) {
+			releasePayload();   // il vecchio payload non serve più
+			method = "GET";
+			//}
+			break;
+			case 307:
+			case 308:
+			// Mantieni il metodo e il payload originali
+			break;
+			default:
+			break;
+		}
+		
+    // client->stop();
+    // headersParsed = false;
+    response.contentLength = 0;
+    inprogressHeaders.clear();
+		
+    retryCount = 1;
+    state = CONNECTING;
+		
+    //log("Redirect " + String(response.statusCode) + " -> " + String(PATHBUFFER) + " con metodo " + String(method));
+    return;
 	}
 	
 	
@@ -514,6 +607,9 @@ void AsyncHTTPClientLight::receiving() {
 		finished = true;
 		client->stop();
 		releasePayload();
+		response.restime = (millis() - response.restime);
+		log("Tempo:" + String(response.restime));
+		
 		if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
 	}
 	
@@ -537,7 +633,7 @@ int AsyncHTTPClientLight::readStream(char* buffer, int lenbuffer, int ndati ){
 			#if ASYNC_HTTP_DEBUG
 				if(c != '\r' && c != '\n') Serial.print(c);
 				if (c == '\r')Serial.print("CR");
-				if (c == '\n')Serial.print("LF");
+				if (c == '\n')Serial.println("LF");
 			#endif
 			if(count_ch < lenbuffer-1)buffer[count_ch++] = c;
 			if (readed == ndati)break;
@@ -629,6 +725,7 @@ void AsyncHTTPClientLight::parseHeaders(){
 	
 	log("header: " + String(lineBuffer));
 	
+	
 	if (search_strbuf(lineBuffer, "HTTP/") == 0) {
 		int space = search_strbuf(lineBuffer, " ");
 		response.statusCode = atoi(&lineBuffer[space + 1]);
@@ -646,117 +743,111 @@ void AsyncHTTPClientLight::parseHeaders(){
 	
 	if (search_strbuf(lineBuffer, "Location:") == 0 && (response.statusCode == 301 || response.statusCode == 302 || response.statusCode == 307)) {
 		trimmer(lineBuffer, 9);
-		log("Redirect verso: " + String(lineBuffer));
+		//log("Redirect verso: " + String(lineBuffer));
 		if(lineBuffer[0] == '/'){					// PATHBUFFER relativo
 			snprintf(PATHBUFFER, sizeof(PATHBUFFER),"%s", lineBuffer);
 			}else{
-		parseURL(lineBuffer);
+			parseURL(lineBuffer);
 		}
+		headersParsed = true;		// interrompo parseheaders e faccio subito redirect
 		return;
-		}
-		
-		
-		if (search_strbuf(lineBuffer, "Content-Type:") == 0) {
+	}
+	
+	
+	if (search_strbuf(lineBuffer, "Content-Type:") == 0) {
 		trimmer(lineBuffer, 14);
 		snprintf(response.contentType, sizeof(response.contentType),"%s", lineBuffer );
-		}
-		else if (search_strbuf(lineBuffer, "Content-Length:") == 0) {
+	}
+	else if (search_strbuf(lineBuffer, "Content-Length:") == 0) {
 		trimmer(lineBuffer, 16);
 		response.contentLength = atoi(lineBuffer);
 		response.isStream = true;
-		}
-		
-		}
-		//------------------------------------
-		int AsyncHTTPClientLight::readUntilTerminator(Stream* client, char* buffer, size_t maxLen, char terminator, unsigned long timeoutMs, bool delCR) {
-		size_t index = 0;
-		unsigned long start = millis();
-		bool isdati = false;
-		
-		while (millis() - start < timeoutMs && index < maxLen - 1) {
+	}
+	
+}
+//------------------------------------
+int AsyncHTTPClientLight::readUntilTerminator(Stream* client, char* buffer, size_t maxLen, char terminator, unsigned long timeoutMs, bool delCR) {
+	size_t index = 0;
+	unsigned long start = millis();
+	bool isdati = false;
+	
+	while (millis() - start < timeoutMs && index < maxLen - 1) {
 		if (client->available()) {
-		char c = client->read();
-		isdati = true;
-		if (c == '\r'){
-		if (delCR)continue;	// ignora il carriage return
+			char c = client->read();
+			isdati = true;
+			if (c == '\r'){
+				if (delCR)continue;	// ignora il carriage return
+			}
+			if (c == terminator) break;	
+			buffer[index++] = c;
 		}
-		if (c == terminator) break;	
-		buffer[index++] = c;
-		}
-		}
-		
-		buffer[index] = '\0';
-		
-		if (index == 0 && millis() - start >= timeoutMs && !isdati) {
+	}
+	
+	buffer[index] = '\0';
+	
+	if (index == 0 && millis() - start >= timeoutMs && !isdati) {
 		return -1; // timeout senza dati
-		}
-		
-		return index; // numero di caratteri letti
-		}
-		//-----------------------------------
-		void AsyncHTTPClientLight::releasePayload() {
-		
-		if(!payloadAllocated) return;
-		if (payloadAllocated && ptr_Inpayload) {
-			free(ptr_Inpayload);
-			ptr_Inpayload = nullptr;
-			payloadAllocated = false;
-			log("Payload liberato");
-		}
-		}
-		
-		//-------------------------------------------------
-		// FUNZIONE TRIMMER toglie spazi iniziali e finali da un buffer
-		int AsyncHTTPClientLight::trimmer(char* buftrim,  int dadove) {
-		
-		int s = dadove;
-		int e = 0;
-		int _last_ch = 0;
-		
-		if (buftrim[0] == '\0') return _last_ch;
-		do {
+	}
+	
+	return index; // numero di caratteri letti
+}
+//-----------------------------------
+void AsyncHTTPClientLight::releasePayload() {
+	
+	if(!payloadAllocated) return;
+	if (payloadAllocated && ptr_Inpayload) {
+		free(ptr_Inpayload);
+		ptr_Inpayload = nullptr;
+		payloadAllocated = false;
+		log("Payload liberato");
+	}
+}
+
+//-------------------------------------------------
+// FUNZIONE TRIMMER toglie spazi iniziali e finali da un buffer
+int AsyncHTTPClientLight::trimmer(char* buftrim,  int dadove) {
+	
+	int s = dadove;
+	int e = 0;
+	int _last_ch = 0;
+	
+	if (buftrim[0] == '\0') return _last_ch;
+	do {
 		if (buftrim[s] == ' ' && _last_ch == 0) {  //tolgo spazi iniziali
-		s++;
-		} else {
-		buftrim[e] = buftrim[s];
-		if (buftrim[e] != ' ') _last_ch = e;  // ultima lettera valida
-		s++;
-		e++;
+			s++;
+			} else {
+			buftrim[e] = buftrim[s];
+			if (buftrim[e] != ' ') _last_ch = e;  // ultima lettera valida
+			s++;
+			e++;
 		}
-		} while (buftrim[s] != '\0');
-		
-		buftrim[_last_ch + 1] = '\0';
-		return _last_ch;
+	} while (buftrim[s] != '\0');
+	
+	buftrim[_last_ch + 1] = '\0';
+	return _last_ch;
+}
+
+// cerca una stringa nel buffer e ritorna la posizione.. -1 se non trova
+int AsyncHTTPClientLight::search_strbuf(const char* buffer, char* str_cmp, int fromwhere) {
+	
+  if (str_cmp[0] == '\0') return fromwhere;
+	
+  int t = fromwhere;
+  int x = 0;
+  int pos = -1;
+	
+  while (buffer[t] != '\0') {
+    if (buffer[t] != str_cmp[x]) {
+      if(pos != -1) t = pos;
+      t++;
+      pos = -1;
+      x = 0;
+			} else {
+      if (pos == -1) pos = t;
+      x++;
+      t++;
+      if (str_cmp[x] == '\0') return pos;
 		}
-		
-		// cerca una stringa nel buffer e ritorna la posizione.. -1 se non trova
-		int AsyncHTTPClientLight::search_strbuf(const char* buffer, char* str_cmp, int fromwhere) {
-		
-		int t = fromwhere;
-		int x = 0;
-		int pos = -1;
-		//bool findok = false;
-		
-		while (str_cmp[x] != '\0' && buffer[t] != '\0') {
-		
-		do {
-		if (buffer[t] != str_cmp[x]) {
-		t++;
-		pos = -1;
-		//findok = false;
-		x = 0;
-		} else {
-		//if(!findok) pos = t;
-		if(pos == -1)pos = t;
-		//findok = true;
-		x++;
-		t++;
-		break;
-		}
-		} while (str_cmp[x] != '\0' && buffer[t] != '\0');
-		
-		}
-		
-		return pos;
-		
-		}																																													
+	}
+  return -1;
+}
