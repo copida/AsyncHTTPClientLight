@@ -35,6 +35,7 @@ enum ChunkState {
 
 struct HTTPResponse {
 	int statusCode = -1;
+	uint32_t restime = 0;
 	char inprogressTitle[64] = {0};
 	char contentType[45] = {0};
 	int contentLength = 0;
@@ -54,7 +55,7 @@ using UnifiedCallback = std::function<void(HTTPEventType type, const HTTPRespons
 class AsyncHTTPClientLight {
 	public:
   AsyncHTTPClientLight();
-		
+	
 	void setResponsePayload(char* buffer, size_t maxLen) {
     responsePayloadBuffer = buffer;
     responsePayloadMaxLen = maxLen;
@@ -86,16 +87,18 @@ class AsyncHTTPClientLight {
   void setDebug(bool enabled);
   void setLogToFile(bool enabled);
   void setMaxRetries(int retries);
+	void setmaxRedirects(int ndirect);
   void onEvent(UnifiedCallback cb);
 	
+	
 	int getLastHTTPcode() const;
-	//String getLastTitle() const;
 	
 	void poll();
+	void poll2();
 	bool isFinished();
 	bool finished;
 	
-
+	
 	private:
 	WiFiClient plainClient;
 	WiFiClientSecure secureClient;
@@ -141,10 +144,10 @@ class AsyncHTTPClientLight {
 	int retryCount;
 	int redirectCount;
 	int maxRedirects = 1;
-		
+	
 	bool debugEnabled;
 	bool logToFile;
-		
+	
 	
 	UnifiedCallback unifiedCallback;
 	std::function<void(int)> retryCallback;
