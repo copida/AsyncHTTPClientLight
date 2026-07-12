@@ -30,7 +30,7 @@ Una libreria C++ ottimizzata per microcontrollori ESP32 che offre connessioni HT
 ✅ **Retry Intelligenti** - Riconnessioni automatiche con configurazione  
 ✅ **Chunked Transfer** - Supporto transfer-encoding: chunked  
 ✅ **Stream di Dati** - Lettura payload a lunghezza fissa  
-✅ **Logging Avanzato** - Debug su Serial e file (SD/SPIFFS/LittleFS)  (attivabile via `#define ASYNC_HTTP_DEBUG`)
+✅ **Logging Avanzato** - Debug su Serial e file (SD/SPIFFS/LittleFS)(attivabile via `#define ASYNC_HTTP_DEBUG`)
 ✅ **Callback Unificati** - Un'unica callback per tutti gli eventi  
 ✅ **Header Personalizzati** - Aggiungi qualsiasi header HTTP  
 ✅ **FreeRTOS Compatible** - Integrato con task ESP32  
