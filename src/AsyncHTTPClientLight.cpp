@@ -8,7 +8,7 @@
 	#define ASYNC_HTTP_LOG_SD
 	//#define ASYNC_HTTP_LOG_SPIFFS
 	//#define ASYNC_HTTP_LOG_LittleFS
-	//#define MAXSIZEFILE_LOG 51200
+	
 	#define MAXSIZEFILE_LOG 512000
 	
 	#ifdef ASYNC_HTTP_LOG_SPIFFS
@@ -85,9 +85,11 @@ void AsyncHTTPClientLight::setDebug(bool enabled) {
 		#define oldLogFile "/old_Log.txt"
 		#define logFile "/http_log.txt"
 		
-		//String fullMsg = logPrefix + msg;
 		
-		if (debugEnabled) Serial.println(logPrefix + msg);
+		if (debugEnabled) {
+			Serial.print(logPrefix);
+			Serial.println(msg); 
+		}
 		#if defined(ASYNC_HTTP_LOG_SPIFFS) || defined(ASYNC_HTTP_LOG_SD) || defined(ASYNC_HTTP_LOG_LittleFS)
 			if (logToFile) {
 				
@@ -96,15 +98,13 @@ void AsyncHTTPClientLight::setDebug(bool enabled) {
 				if (f) {
 					f.print(logPrefix);
 					f.println(msg);
-					//f.println(fullMsg);
-					//f.close();
 				}
 				// Rotazione semplice se supera maxSize
         if (f.size() > MAXSIZEFILE_LOG) {
 					f.close();
 					FS_LOG.remove(oldLogFile);
 					FS_LOG.rename(logFile, oldLogFile);
-					f = FS_LOG.open(logFile, FILE_WRITE);  // Crea nuovo
+					//f = FS_LOG.open(logFile, FILE_WRITE);  // Crea nuovo
 					}else{
 					f.close();
 				}
@@ -242,6 +242,7 @@ void AsyncHTTPClientLight::beginRequest(const char* url, const char* method_, co
 	if (!isFinished() && redirectCount == 0) {
 		log("Overload: richiesta già in corso: " + String(response.inprogressTitle));
 		triggerEvent(HTTPEventType::Overload, String(pendingTitle));
+		pendingTitle[0] = '\0';
 		return;
 	}
 	
@@ -389,10 +390,11 @@ void AsyncHTTPClientLight::connecting() {
 			if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
 		}
 		
-		response.restime = (millis() - response.restime);
-		log("Tempo:" + String(response.restime));
-		finished = true;
-		state = IDLE;
+		// response.restime = (millis() - response.restime);
+		// log("Tempo:" + String(response.restime));
+		// finished = true;
+		// state = IDLE;
+		endhttp();
 		return;
 	}
 	
@@ -407,7 +409,7 @@ void AsyncHTTPClientLight::connecting() {
 	if(redirectCount > 0){
 		log("REDIRECT..");
 		log("Host: " + String(host));
-		log("Path: " + String(PATHBUFFER));
+		//log("Path: " + String(PATHBUFFER));
 	}
 	log("Tentativo n:" + String(retryCount) );
 	
@@ -515,6 +517,11 @@ void AsyncHTTPClientLight::receiving() {
 		
     // Copia il nuovo URL o path relativo
     //if (search_strbuf(lineBuffer, "Location:") == 0) {
+		
+		// Svuota velocemente tutti i dati residui inviati dal server SSL
+		while (client->available() > 0) {
+			client->read(); // Legge il byte e lo scarta immediatamente, liberando la RAM
+		}
 		client->stop();
 		headersParsed = false;
 		//response.contentLength = 0;
@@ -525,10 +532,11 @@ void AsyncHTTPClientLight::receiving() {
 			snprintf(response.msg_error, sizeof(response.msg_error), "Too many redirection");
 			log(response.msg_error);
 			if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
-			response.restime = (millis() - response.restime);
-			log("Tempo:" + String(response.restime));
-			finished = true;
-			state = IDLE;
+			// response.restime = (millis() - response.restime);
+			// log("Tempo:" + String(response.restime));
+			// finished = true;
+			// state = IDLE;
+			endhttp();
 			return;
 		}
 		//gia fatto da parseHeaders
@@ -585,32 +593,28 @@ void AsyncHTTPClientLight::receiving() {
 			log("Errore dati nello stream");
 			triggerEvent(HTTPEventType::Error, logPrefix + "n. dati non corrispondono");
 		} 
-		response.isStream = false;
+		response.isStream = false;	// stop lettura stream
 	} 
 	
 	
 	if (response.isChunked){
-		lastActivity = millis();
-		if(readChunked())response.isChunked = false;		// stop lettura chunked
-		if(!response.isChunked){
-			//Serial.print(responsePayloadBuffer);
-			len = strlen(responsePayloadBuffer);
-			
-		} 	
-		// if (diagnostics.chunkMalformed) {
-		// triggerEvent(HTTPEventType::Warning, "Chunk malformato");
-		// }
+		//lastActivity = millis();
+		if(readChunked()){
+			response.isChunked = false;		// stop lettura chunked
+		} 
 	} 
 	
 	if(!response.isStream  && !response.isChunked){			//finito
-		state = IDLE;
-		finished = true;
 		client->stop();
 		releasePayload();
-		response.restime = (millis() - response.restime);
-		log("Tempo:" + String(response.restime));
-		
 		if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
+		// response.restime = (millis() - response.restime);
+		// log("Tempo:" + String(response.restime));
+		// finished = true;
+		// state = IDLE;
+		endhttp();
+		
+		//if (unifiedCallback) unifiedCallback(HTTPEventType::Response, &response);
 	}
 	
 }	//end
@@ -646,85 +650,220 @@ int AsyncHTTPClientLight::readStream(char* buffer, int lenbuffer, int ndati ){
 	log("Letti n. bytes: " + String(readed));
 	return readed;
 	
-}
-//---------------------------------------
-bool AsyncHTTPClientLight::readChunked(){
+	}/*
+	//---------------------------------------
+	// ritorna vero se lettura chunk finita
+	bool AsyncHTTPClientLight::readChunked(){
 	
 	bool ok_chunk = false;
-	bool endchunk = false;
-	int d = 0;
+	//bool endchunk = false;
 	
+	//log("lung. buffer:" + String(responsePayloadMaxLen));
 	while (millis() - lastActivity < timeoutMs) {
-		
-		while (client->available()) {
-			char c = client->read();
-			if(c == '\n' && WORKBUFFER[bufIndex-1] == '\r'){
-				WORKBUFFER[bufIndex -1] = '\0';
-				ok_chunk = true;
-				break;
-				}else{
-				WORKBUFFER[bufIndex++] = c;
-				if(bufIndex == sizeof(WORKBUFFER)-1){
-					WORKBUFFER[bufIndex] = '\0';
-					//response.sizeBuffer += bufIndex; //
-					ok_chunk = true;
-					break;
-				}
-			}
-		}
-		
-		if(!ok_chunk)return ok_chunk;
+	
+	while (client->available()) {
+	char c = client->read();
+	if(c == '\n' && WORKBUFFER[bufIndex-1] == '\r'){
+	WORKBUFFER[bufIndex -1] = '\0';
+	ok_chunk = true;
+	break;
+	}else{
+	WORKBUFFER[bufIndex++] = c;
+	// se buffer pieno...
+	if(bufIndex == sizeof(WORKBUFFER)-1){
+	
+	if(WORKBUFFER[bufIndex-1] == '\r') {
+	bufIndex--;
+	}
+	
+	WORKBUFFER[bufIndex] = '\0';
+	ok_chunk = true;
+	break;
+	}
+	}
+	}
+	
+	//if(!ok_chunk)return ok_chunk;
+	if(!ok_chunk)return false;
+	
+	switch (chunkState) {
+	case WAITING_SIZE:
+	response.expectedLength = (int)strtol(WORKBUFFER, nullptr, 16);
+	//Serial.printf("Exp. lunghezza chunk: (%d)\r\n", response.expectedLength);//
+	if (response.expectedLength == 0) {
+	chunkState = SKIPPING_CRLF;
+	} else {
+	chunkState = READING_DATA;
+	}
+	
+	break;
+	case READING_DATA:
+	//response.contentLength += strlen(WORKBUFFER);
+	
+	_lenchunk += strlen(WORKBUFFER);
+	
+	if(bufIndex == sizeof(WORKBUFFER) -1){
+	log("Portion Chunk:\n" + String(WORKBUFFER));		
+	}else{
+	// riga chunk completa
+	if(_lenchunk != response.expectedLength){
+	log("sizeChunk:\n" + String(_offset) + "/" + String(strlen(WORKBUFFER)) +"/" + String(response.expectedLength));
+	triggerEvent(HTTPEventType::Error, logPrefix + "Chunk imperfect\n");
+	} 
+	log("Chunk:\n" + String(WORKBUFFER));
+	_lenchunk = 0;
+	chunkState = WAITING_SIZE;
+	}
+	
+	if (unifiedCallback) unifiedCallback(HTTPEventType::Chunk, &response);
+	
+	if (_offset < responsePayloadMaxLen - 1) {
+	_offset += snprintf(&responsePayloadBuffer[_offset], responsePayloadMaxLen - _offset, "%s", WORKBUFFER);
+	} else {
+	triggerEvent(HTTPEventType::Error, logPrefix + "Buffer too small");
+	}
+	
+	break;
+	case SKIPPING_CRLF:
+	//endchunk = true;
+	chunkState = FINISHED;
+	log("Chunked Finished");
+	return true;
+	break;
+	
+	default:
+	break;
+	}
+	
+	bufIndex = 0;
+	if())
+	return false;		// processo chunk non ancora finito ..ritornero'
+	}
+	// superato timeout
+	log("Timeout Chunk:\n");
+	return true;		// interrompo chunk
+	}
+*/
+bool AsyncHTTPClientLight::readChunked() {
+	
+	
+	
+	if (client->available()) {
+		lastActivity = millis(); // <--- Aggiornato UNA SOLA VOLTA per questa esecuzione!
+	}
+	
+	while (client->available()) {
 		
 		switch (chunkState) {
-			case WAITING_SIZE:
-			response.expectedLength = (int)strtol(WORKBUFFER, nullptr, 16);
-			//Serial.printf("lunghezza chunk: %d\r\n", response.expectedLength);//
-			if (response.expectedLength == 0) {
-				chunkState = SKIPPING_CRLF;
-				} else {
-				chunkState = READING_DATA;
+			
+			case WAITING_SIZE: {
+				// In questo stato cerchiamo la riga del valore esadecimale
+				char c = client->read();
+				
+				if (c == '\n' && bufIndex > 0 && WORKBUFFER[bufIndex-1] == '\r') {
+					WORKBUFFER[bufIndex-1] = '\0'; // Taglia il \r
+					response.expectedLength = (int)strtol(WORKBUFFER, nullptr, 16);
+					totChunk += response.expectedLength;
+					
+					bufIndex = 0; // Resetta il buffer di lavoro
+					_lenchunk = 0; // Resetta il contatore dei byte letti per il prossimo stato
+					
+					if (response.expectedLength == 0) {
+						chunkState = SKIPPING_CRLF; // Fine della trasmissione
+						} else {
+						chunkState = READING_DATA;
+					}
+					} else {
+					// Accumula i caratteri della dimensione esadecimale
+					if (bufIndex < sizeof(WORKBUFFER) - 1) {
+						WORKBUFFER[bufIndex++] = c;
+					}
+				}
+				break;
 			}
 			
-			break;
-			case READING_DATA:
-			response.contentLength += strlen(WORKBUFFER);
-			//Serial.printf("arrivati n.%d byte %d", strlen(WORKBUFFER), response.expectedLength);
-			if(bufIndex == sizeof(WORKBUFFER)){
-				log("Portion Chunk: " + String(WORKBUFFER));		
-				}else{
-				log("Chunk: " + String(WORKBUFFER));
-				chunkState = WAITING_SIZE;
+			case READING_DATA: {
+				// STATO UNIVERSALE: Leggiamo i byte contando, senza guardare cosa c'è dentro!
+				char c = client->read();
+				_lenchunk++; // Incrementiamo il contatore dei byte reali estratti
+				
+				if (_offset < responsePayloadMaxLen - 1) {
+					responsePayloadBuffer[_offset++] = c;
+					responsePayloadBuffer[_offset] = '\0'; // Mantieni la stringa terminata
+					//if(_offset >= responsePayloadMaxLen -1 )triggerEvent(HTTPEventType::Error, logPrefix + "Buffer too small");
+					response.contentLength = _offset;
+				}
+				
+				// 2. Abbiamo estratto tutti i byte promessi da questo chunk?
+				if (_lenchunk == response.expectedLength) {
+					//totChunk += _lenchunk;
+					if (unifiedCallback) unifiedCallback(HTTPEventType::Chunk, &response);
+					//chunkState = SKIPPING_CHUNK_CRLF; // Passiamo a scartare il \r\n di cortesia
+					chunkState = SKIPPING_CRLF; // Passiamo a scartare il \r\n di cortesia
+				}
+				break;
 			}
 			
-			if(strlen(WORKBUFFER) != response.expectedLength){
-				snprintf(responsePayloadBuffer, responsePayloadMaxLen ,"%s","Chunk malformato:\n" );
-			} 
-			if (unifiedCallback) unifiedCallback(HTTPEventType::Chunk, &response);
-			d = snprintf(responsePayloadBuffer, responsePayloadMaxLen ,"%s%s",responsePayloadBuffer, WORKBUFFER );
-			//Serial.printf("#########################%d %d\n", d,responsePayloadMaxLen);
-			if(d >= responsePayloadMaxLen)triggerEvent(HTTPEventType::Error, logPrefix + "Buffer too small");
+			//case SKIPPING_CHUNK_CRLF: {
+			// Svuota i due caratteri di controllo (\r\n) che separano i chunk
+			//	char c = client->read();
+			// Aspettiamo il \n che chiude la sequenza di cortesia
+			//	if (c == '\n') {
+			//		chunkState = WAITING_SIZE; // Canale pulito, aspettiamo il prossimo chunk
+			//	}
+			//	break;
+			//}
 			
-			break;
-			case SKIPPING_CRLF:
-			endchunk = true;
-			chunkState = FINISHED;
-			log("Chunked Finished");
-			return endchunk;
-			break;
+			case SKIPPING_CRLF: {
+				char c = client->read();
+				if (c == '\n') {
+					if (response.expectedLength == 0){
+						// Svuota eventuali dati rimasti nel buffer di lettura prima di chiudere
+						while (client->available() > 0) {
+							client->read();
+						}
+						chunkState = FINISHED;
+						//log("Chunked Finished letti");
+						if(_offset < totChunk)triggerEvent(HTTPEventType::Error, logPrefix + "Buffer too small " + String(_offset) + " need " + String(totChunk));
+						log("Chunked Finished letti:" + String(_offset) + " bytes di " + String(totChunk));
+						return true; // Trasmissione completata con successo!
+						}else{
+						chunkState = WAITING_SIZE; // Canale pulito, aspettiamo il prossimo chunk
+					}
+				}
+				break;
+			}
 			
 			default:
 			break;
 		}
-		bufIndex = 0;
-		return endchunk;
 	}
+	
+	if (chunkState == FINISHED) return true;
+	
+	if (millis() - lastActivity >= timeoutMs) {
+		log("Timeout Chunk");
+		return true; // Interrompe per timeout
+	}
+	
+	return false; 
 }
 
 //------------------------------------
 void AsyncHTTPClientLight::parseHeaders(){
 	
-	log("header: " + String(lineBuffer));
+	// modifica per header Reporting-Endpoints ..che non serve
 	
+	if (search_strbuf(lineBuffer, "Reporting-Endpoints:") == 0) {
+		// taglio header per risparmiare byte e uso di string e di log
+		// non serve 
+		lineBuffer[21] = '\0';
+	}
+	
+	// END MODIFICA
+	
+	
+	log("header: " + String(lineBuffer));
 	
 	if (search_strbuf(lineBuffer, "HTTP/") == 0) {
 		int space = search_strbuf(lineBuffer, " ");
@@ -733,10 +872,13 @@ void AsyncHTTPClientLight::parseHeaders(){
 		return;
 	}
 	
-	
 	if (search_strbuf(lineBuffer, "Transfer-Encoding:") == 0 && search_strbuf(lineBuffer, "chunked") != -1) {
 		response.isChunked = true;
+		_offset = 0;
+		_lenchunk = 0;
+		totChunk = 0;
 		chunkState = WAITING_SIZE;
+		lastActivity = millis();
 		log("Chunked encoding rilevato");
 		return;
 	}
@@ -771,7 +913,7 @@ int AsyncHTTPClientLight::readUntilTerminator(Stream* client, char* buffer, size
 	unsigned long start = millis();
 	bool isdati = false;
 	
-	while (millis() - start < timeoutMs && index < maxLen - 1) {
+	while (millis() - start < timeoutMs) {
 		if (client->available()) {
 			char c = client->read();
 			isdati = true;
@@ -779,7 +921,9 @@ int AsyncHTTPClientLight::readUntilTerminator(Stream* client, char* buffer, size
 				if (delCR)continue;	// ignora il carriage return
 			}
 			if (c == terminator) break;	
-			buffer[index++] = c;
+			if(index < maxLen - 1){		// elimino tutti i dati in eccesso
+				buffer[index++] = c;
+			}
 		}
 	}
 	
@@ -830,24 +974,43 @@ int AsyncHTTPClientLight::trimmer(char* buftrim,  int dadove) {
 // cerca una stringa nel buffer e ritorna la posizione.. -1 se non trova
 int AsyncHTTPClientLight::search_strbuf(const char* buffer, char* str_cmp, int fromwhere) {
 	
-  if (str_cmp[0] == '\0') return fromwhere;
+	if (str_cmp[0] == '\0') return fromwhere;
 	
-  int t = fromwhere;
-  int x = 0;
-  int pos = -1;
+	int t = fromwhere;
+	int x = 0;
+	int pos = -1;
 	
-  while (buffer[t] != '\0') {
-    if (buffer[t] != str_cmp[x]) {
-      if(pos != -1) t = pos;
-      t++;
-      pos = -1;
-      x = 0;
+	while (buffer[t] != '\0') {
+		if (buffer[t] != str_cmp[x]) {
+			if(pos != -1) t = pos;
+			t++;
+			pos = -1;
+			x = 0;
 			} else {
-      if (pos == -1) pos = t;
-      x++;
-      t++;
-      if (str_cmp[x] == '\0') return pos;
+			if (pos == -1) pos = t;
+			x++;
+			t++;
+			if (str_cmp[x] == '\0') return pos;
 		}
 	}
-  return -1;
+	return -1;
+}
+
+// Trovare la posizione di un carattere (indexOf)
+// int AsyncHTTPClientLight::bufferChr(const char* str, char c) {
+// int i = 0;
+// while (str[i] != '\0') {
+// if (str[i] == c) {
+// return i;  // Carattere trovato
+// }
+// i++;
+// }
+// return -1;  // Carattere non trovato
+// }
+
+void AsyncHTTPClientLight::endhttp(){
+	response.restime = (millis() - response.restime);
+	log("Tempo:" + String(response.restime));
+	finished = true;
+	state = IDLE;
 }
