@@ -29,9 +29,11 @@ enum class HTTPEventType {
 enum ChunkState {
 	WAITING_SIZE,
 	READING_DATA,
+	SKIPPING_CHUNK_CRLF,
 	SKIPPING_CRLF,
 	FINISHED
 };
+
 
 struct HTTPResponse {
 	int statusCode = -1;
@@ -44,7 +46,7 @@ struct HTTPResponse {
 	int expectedLength = CHUNK_WAITING;
 	
 	char* ptr_workbuffer = nullptr;			// per chunked e altro..
-	char msg_error[40] = {0};			// per messaggi di errore
+	char msg_error[50] = {0};			// per messaggi di errore
 };
 
 
@@ -110,6 +112,8 @@ class AsyncHTTPClientLight {
 	char* responsePayloadBuffer = nullptr;
 	size_t responsePayloadMaxLen = 0;
 	bool newPtrOut = false;
+	size_t _offset = 0;
+	size_t _lenchunk = 0;
 	
 	char host[40];
 	char workBuffer[WORKBUFFER_SIZE];
@@ -138,6 +142,7 @@ class AsyncHTTPClientLight {
 	bool payloadAllocated = false;
 	bool headersParsed;
 	int chunkState = WAITING_SIZE;
+	int totChunk = 0;
 	
 	int requestCounter;
 	int maxRetries;
@@ -152,6 +157,7 @@ class AsyncHTTPClientLight {
 	UnifiedCallback unifiedCallback;
 	std::function<void(int)> retryCallback;
 	
+	void endhttp();
 	void reset();
 	bool parseURL(const char* url);
 	void log(const String& msg);
@@ -161,6 +167,7 @@ class AsyncHTTPClientLight {
 	void receiving();
 	int trimmer(char* buftrim,  int dadove = 0);
 	int search_strbuf(const char* buffer, char* str_cmp, int fromwhere = 0);
+	//int bufferChr(const char* str, char c);
 	void releasePayload();
 	void parseHeaders();
 	int readUntilTerminator(Stream* client, char* buffer, size_t maxLen, char terminator, unsigned long timeoutMs, bool delCR = true);
