@@ -47,6 +47,7 @@ struct HTTPResponse {
 	
 	char* ptr_workbuffer = nullptr;			// per chunked e altro..
 	char msg_error[50] = {0};			// per messaggi di errore
+	char backHeader[80] = {0};			// contenuto header letto...readHeader()
 };
 
 
@@ -91,6 +92,7 @@ class AsyncHTTPClientLight {
   void setMaxRetries(int retries);
 	void setmaxRedirects(int ndirect);
   void onEvent(UnifiedCallback cb);
+	void readHeader(const String& _header);
 	
 	
 	int getLastHTTPcode() const;
@@ -109,6 +111,7 @@ class AsyncHTTPClientLight {
 	
 	HTTPResponse response;
 	
+	char _backHeader[40] = { '\0'};
 	char* responsePayloadBuffer = nullptr;
 	size_t responsePayloadMaxLen = 0;
 	bool newPtrOut = false;
@@ -133,7 +136,8 @@ class AsyncHTTPClientLight {
 	
 	char lineBuffer[LINE_BUFFER_SIZE];
 	size_t bufIndex = 0;
-	String logPrefix;
+	//String logPrefix;
+	char logPrefix[12] = {0};
 	char pendingTitle[64] = {0};  // titolo massimo 63 caratteri + terminatore
 	
 	bool _isSyncMode = false;
@@ -158,21 +162,31 @@ class AsyncHTTPClientLight {
 	std::function<void(int)> retryCallback;
 	
 	void endhttp();
+	void endclient();
 	void reset();
 	bool parseURL(const char* url);
-	void log(const String& msg);
+	//void log(const String& msg);
+	//#if ASYNC_HTTP_DEBUG
+	// Versione standard per stringhe classiche (char*)
+	void log(const char* formato, ...);
+	
+	// NUOVA: Versione per stringhe racchiuse nella macro F()
+	void log(const __FlashStringHelper* formato, ...);
+	//	#endif
+	
 	void checktimeout();
 	void connecting();
 	void sending();
 	void receiving();
 	int trimmer(char* buftrim,  int dadove = 0);
-	int search_strbuf(const char* buffer, char* str_cmp, int fromwhere = 0);
+	int search_strbuf(const char* buffer, char* word_cmp, int fromwhere = 0);
 	//int bufferChr(const char* str, char c);
 	void releasePayload();
 	void parseHeaders();
 	int readUntilTerminator(Stream* client, char* buffer, size_t maxLen, char terminator, unsigned long timeoutMs, bool delCR = true);
 	bool readChunked();
 	int readStream(char* buffer, int lenbuffer, int ndati );
+	void readAll(Stream* client, char* buffer, size_t maxLen);
 	
 	void triggerEvent(HTTPEventType type, const char* data);
 	void triggerEvent(HTTPEventType type, const String& message);
