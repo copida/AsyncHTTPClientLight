@@ -4,520 +4,446 @@ AsyncHTTPClientLight — Libreria HTTP asincrona (e sincrona!) per ESP32
 ![Platform: ESP32](https://img.shields.io/badge/Platform-ESP32-blue.svg)
 ![Version](https://img.shields.io/badge/version-2.0.0-lightgrey.svg)
 
-Autore: Davide
-Licenza: MIT
+Autore: Davide  
+Licenza: MIT  
 Versione: 2.0 (AsyncClient Evolution)
 
-## Introduzione
-AsyncHTTPClientLight è una libreria leggera e modulare per gestire richieste HTTP su ESP32
-Pensata per ambienti embedded, offre un'interfaccia asincrona non bloccante,
-ma include anche una modalità sincrona intelligente per chi desidera semplicità e immediatezza.
+## 📡 Cos'è
 
-# AsyncHTTPClientLight
+**AsyncHTTPClientLight** è una libreria HTTP leggera per ESP32 che offre richieste non bloccanti (asincrone) e bloccanti (sincrone), con gestione automatica di redirect, retry, timeout e logging dettagliato.
 
-📡 **Libreria HTTP leggera per ESP32 con supporto asincrono, sincrono, HTTPS, redirect, logging e callback.**
-
-Una libreria C++ ottimizzata per microcontrollori ESP32 che offre connessioni HTTP/HTTPS non bloccanti (asincrone) e bloccanti (sincrone), con gestione automatica di redirect, retry, timeout e trasferimento chunked.
+Nata per sostituire **HTTPClient** nei progetti dove la stabilità conta:
+- Niente memory leak da connessioni non chiuse bene
+- Redirect 302 gestiti correttamente (es. Google Apps Script, Adafruit IO)
+- Log leggibile di ogni fase, per capire **perché** una richiesta fallisce
+- Memoria prevedibile (buffer di risposta scelto da te)
 
 ---
 
 ## 🎯 Caratteristiche Principali
 
-✅ **Modalità Asincrona** - Richieste non bloccanti con state machine  
-✅ **Modalità Sincrona** - Richieste bloccanti (per compatibility)  
-✅ **HTTPS/SSL** - Supporto completo per connessioni crittografate  
-✅ **Redirect Automatico** - Gestione 301, 302, 303, 307, 308  
-✅ **Retry Intelligenti** - Riconnessioni automatiche con configurazione  
-✅ **Chunked Transfer** - Supporto transfer-encoding: chunked  
-✅ **Stream di Dati** - Lettura payload a lunghezza fissa  
-✅ **Logging Avanzato** - Debug su Serial e file (SD/SPIFFS/LittleFS)
-✅ **Callback Unificati** - Un'unica callback per tutti gli eventi  
-✅ **Header Personalizzati** - Aggiungi qualsiasi header HTTP  
-✅ **FreeRTOS Compatible** - Integrato con task ESP32  
+✅ **Modalità Asincrona** — Richieste non bloccanti con state machine  
+✅ **Modalità Sincrona** — Richieste bloccanti (per setup o test)  
+✅ **Modalità Mista** — Usa entrambe nello stesso sketch  
+✅ **HTTPS Automatico** — Abilita WiFiClientSecure se l'URL contiene `https://`  
+✅ **Redirect Automatico** — Segue 301, 302, 303, 307, 308  
+✅ **Retry Intelligenti** — Riconnessioni automatiche configurabili  
+✅ **Chunked Transfer** — Supporto `transfer-encoding: chunked`  
+✅ **Callback Unificata** — Un'unica callback per tutti gli eventi  
+✅ **Header Personalizzati** — Aggiungi header HTTP custom (es. Authorization)  
+✅ **Logging Avanzato** — Debug su Serial e file (SD/SPIFFS/LittleFS)  
+✅ **Buffer Esterno** — Usa PSRAM per payload grandi (es. 50KB)  
+✅ **FreeRTOS Compatible** — Pensata per ambienti multi-task ESP32
 
 ---
 
-Timeout configurabile
-Protezione da overload
-Compatibile con WiFiClientSecure per HTTPS
-Esempi inclusi: GET, POST, HTTPS, AsyncTestServer
+## 📦 Installazione
 
+### Manuale
+1. Clona o scarica il repository
+2. Copia la cartella nella tua libreria Arduino: `~/Arduino/libraries/AsyncHTTPClientLight`
+3. Riavvia Arduino IDE
 
- progettata per richieste GET/POST PUT DELETE non bloccanti,
- con supporto a redirect, chunked transfer, header personalizzati e logging modulare.
-
-
-✅ Asincrona per prestazioni
-✅ Sincrona per praticità
-✅ Unica API, doppia anima
-
-
-## Filosofia
-- Leggerezza: nessun overhead inutile
-- Controllo: ogni fase della richiesta è gestibile
-- Flessibilità: compatibile con loop, RTOS, e modalità sincrona
-- Trasparenza: logging dettagliato su seriale, SPIFFS o SD
-
-## Installazione
-- Clona o scarica il repository
-- Copia la cartella AsyncHTTPClientLight nella tua cartella libraries
-- Assicurati di avere WiFiClientSecure per HTTPS
+### Arduino Library Manager (prossimamente)
+`Sketch → Include Library → Manage Libraries → AsyncHTTPClientLight`
 
 ### Dipendenze
 - **Arduino.h** (standard ESP32)
 - **WiFiClient.h** (standard ESP32)
-- **WiFiClientSecure.h** (standard ESP32)
-- **vector** (STL standard)
-- **functional** (STL standard)
-- **SD.h** (opzionale, per logging)
-- **SPIFFS.h** (opzionale, per logging)
-- **LittleFS.h** (opzionale, per logging)
+- **WiFiClientSecure.h** (standard ESP32, per HTTPS)
+- **vector, functional** (STL standard)
+- **SD.h** (opzionale, per logging su SD card)
+- **SPIFFS.h** (opzionale, per logging su SPIFFS)
+- **LittleFS.h** (opzionale, per logging su LittleFS)
 
+---
 
-## Setup rapido
+## 🚀 Quick Start
+
+### Asincrono (consigliato)
 ```cpp
+#include <WiFi.h>
 #include "AsyncHTTPClientLight.h"
 
-AsyncHTTPClientLight client;
-client.onEvent(handleHTTPEvent);
+AsyncHTTPClientLight http;
 
-client.beginRequest("http://example.com/data", "POST", jsonPayload);
-
-void loop();
-client.poll();
-
-if (client.isFinished()) {
-  Serial.println(client.getLastHTTPcode());
+void handleEvent(HTTPEventType type, const HTTPResponse* res) {
+  if (type == HTTPEventType::Response) {
+    Serial.printf("HTTP %d\n", res->statusCode);
+    Serial.println(http.getResponsePayload());
+  }
 }
-```
 
-## Modalità sincrona
-```cpp
-//NO: client.poll();
-
-//HTTPS POST sincrona
-void testSync() {
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin("SSID", "PASSWORD");
+  while (WiFi.status() != WL_CONNECTED) delay(500);
+  
   http.setDebug(true);
-  http.addTitle("Test POST Sync");
-
-  const char* payload = "{\"name\":\"ESP32\"}";
-  int status = http.runSync("https://httpbin.org/post", "POST", payload);
-
-  Serial.printf("Codice HTTP: %d\n", http.getLastHTTPcode());
-  Serial.println(client.getResponse());
+  http.onEvent(handleEvent);
+  http.addTitle("Mia richiesta");
+  http.beginRequest("https://api.example.com/data", "GET");
 }
 
+void loop() {
+  http.poll();  // ← IMPORTANTE: chiamare a ogni loop()
+  delay(100);
+}
 ```
 
-## Modalità Mista
+### Sincrono (semplice, ma blocca il loop)
 ```cpp
-void loop(){
-client.poll();
-//.....
-client.beginRequest("http://example.com/data", "POST", jsonPayload);
-int codhttp = client.runSync("http://example.com/data", "GET");
-if(codhttp != 200)....
+void setup() {
+  WiFi.begin("SSID", "PASSWORD");
+  while (WiFi.status() != WL_CONNECTED) delay(500);
+  
+  int httpCode = http.runSync("https://api.example.com/data", "GET");
+  Serial.printf("HTTP %d\n", httpCode);
+  Serial.println(http.getResponsePayload());
+}
 
-//La funzione runSync() rileva se è in corso una richiesta asincrona
-// e la porta a termine attivamente prima di avviare la propria.
+void loop() {}
 ```
 
---------------------------------------------------------------------
+---
 
-🔁 API principali
+## 💡 Modalità di utilizzo
 
-| Funzione                          | Descrizione                           |
-|-----------------------------------|---------------------------------------|
-| beginRequest(url,method, payload) | Avvia una richiesta asincrona         |
-| runSync(url, method, payload)     | Avvia una richiesta asincrona         |
-| poll()                            | Gestisce lo stato interno             |
-| isFinished()                      | Verifica se la richiesta è completata |
-| setResponsePayload(char* buffer, size_t maxLen)| Set Buffer esterno per payload|
-| getLastHTTPcode()                 | Restituisce il codice HTTP            |
-| onEvent(callback)                 | Callback per eventi HTTP              |
-| addTitle("Titolo")                | Etichetta per logging                 |
-| setTimeout(millis)                | imposta Timeout richieste             |
-| setDebug(true)                    | Abilita debug log                     |
-| setLogToFile(true)                | Attiva log su SPIFFS LittleFS o SD    |
-| setMaxRetries(3)                  | Num. tentativi x timeout (default 1)  |
-| setmaxRedirects(2)                |Imposta max redirect da seguire (default: 1
-
-Struttura response:
-
-| Nome                              | Descrizione                           |
-|-----------------------------------|---------------------------------------|
-| int statusCode                    | risposta codice HTTP, -1 se errore    |
-| char* inprogressTitle             | Titolo Richiesta                      |
-| char* contentType                 | Type content                          |
-| int contentLength                 | Lunghezza payload                     |
-| char* ptr_workbuffer              | Puntatore risposta                    |
-| char msg_error                    | Messaggi Errori                       |
-
-
-##  CALLBACK UNIFICATA ###############
-es: tipica callback...
-🔄 Eventi supportati (callback)
-##Evento	Descrizione:.
-
-HTTPEventType::Response	Risposta HTTP ricevuta.
-
-HTTPEventType::Error	Timeout, connessione fallita.
-
-HTTPEventType::Chunk	Dati chunk ricevuti (parziale).
-
-HTTPEventType::Overload	Richiesta già in corso.
+### 1️⃣ Asincrona (Non-bloccante)
+Ideale per applicazioni real-time dove il loop deve continuare a girare.
 
 ```cpp
-    http.onEvent(HTTPEventType type, const HTTPResponse *res) {
-    if (type == HTTPEventType::Response) {
-      Serial.printf("Status: %d\n", res->statusCode);
-      Serial.println("Payload:");
-      Serial.println(res->ptr_outbuffer); // Contenuto ricevuto
-    }
-    if (type == HTTPEventType::Error) {
-      Serial.printf("Errore: %s\n", res->msg_error);
-    }
-  });
+http.beginRequest(url, "POST", jsonPayload);  // Avvia, non aspetta
+
+// Nel loop():
+http.poll();  // Gestisci state machine
+if (http.isFinished()) {
+  Serial.println(http.getResponsePayload());
+}
 ```
-es: callback completa...
-```cpp
 
-void handleHTTPEvent(HTTPEventType type, const HTTPResponse* response) {
+**Vantaggi:**
+- Loop non si ferma
+- Puoi gestire sensori, pulsanti, display mentre la richiesta è in corso
+- Callback notifica quando la risposta arriva
+
+**Svantaggi:**
+- Un po' più complessa da usare
+- Una sola richiesta alla volta (le altre arrivano con `Overload`)
+
+---
+
+### 2️⃣ Sincrona (Bloccante)
+Ideale per setup iniziale, configurazione, oppure sketch semplici.
+
+```cpp
+int httpCode = http.runSync(url, "GET");  // Aspetta risposta
+Serial.println(http.getResponsePayload());
+```
+
+**Vantaggi:**
+- Semplice da usare
+- API diretta: chiami e hai subito la risposta
+
+**Svantaggi:**
+- Loop è bloccato durante la richiesta
+- Non puoi controllare sensori/pulsanti/display durante
+
+---
+
+### 3️⃣ Mista
+Usa modalità asincrona nel loop, e sincrona dove serve una risposta immediata.
+
+```cpp
+void loop() {
+  http.poll();  // Asincrona
+  if (someEvent) {
+    int code = http.runSync(url, "GET");  // Sincrona
+    // runSync() completa la richiesta asincrona precedente, se in corso
+  }
+}
+```
+
+---
+
+## 🔁 API Principali
+
+| Funzione | Descrizione |
+|----------|-------------|
+| `beginRequest(url, method, payload)` | Avvia richiesta asincrona |
+| `runSync(url, method, payload)` | Richiesta sincrona, ritorna HTTP code |
+| `poll()` | **Chiama a ogni loop()**: gestisce state machine |
+| `isFinished()` | Verifica se richiesta completata |
+| `getLastHTTPcode()` | Codice HTTP (200, 404, ecc.) |
+| `getResponsePayload()` | Buffer della risposta |
+| `setResponsePayload(buffer, size)` | Buffer esterno (PSRAM) |
+| `addHeader(key, value)` | Aggiungi header HTTP |
+| `addTitle(label)` | Etichetta per logging |
+| `setTimeout(ms)` | Timeout richiesta (default 10000) |
+| `setMaxRetries(n)` | Tentativi su timeout (default 1) |
+| `setmaxRedirects(n)` | Max redirect da seguire (default 1) |
+| `setDebug(true)` | Abilita log su Serial |
+| `setLogToFile(true)` | Salva log su SD/SPIFFS/LittleFS |
+| `onEvent(callback)` | Callback per eventi HTTP |
+
+---
+
+## 🔄 Eventi Callback
+
+```cpp
+void handleEvent(HTTPEventType type, const HTTPResponse* res) {
   switch (type) {
     case HTTPEventType::Response:
-      Serial.println("✅ Risposta ricevuta!");
-      Serial.printf("Codice HTTP: %d\n", response->statusCode);
-      Serial.printf("Tipo: %s\n", response->contentType);
-      Serial.printf("Dimensione: %d bytes\n", response->contentLength);
-      Serial.printf("Payload: %s\n", http.getResponsePayload());
+      Serial.printf("✅ HTTP %d\n", res->statusCode);
+      Serial.println(http.getResponsePayload());  // ← valido solo qui!
       break;
-      
-    case HTTPEventType::Error:
-      Serial.printf("❌ Errore: %s\n", response->msg_error);
-      break;
-      
+    
     case HTTPEventType::Timeout:
-      Serial.printf("⏱️ Timeout: %s\n", response->msg_error);
+      Serial.printf("⏱️ Timeout: %s (retry...)\n", res->msg_error);
       break;
-      
+    
+    case HTTPEventType::Error:
+      Serial.printf("❌ Errore: %s\n", res->msg_error);
+      break;
+    
     case HTTPEventType::Overload:
-      Serial.println("⚠️ Richiesta già in corso!");
+      Serial.println("⚠️ Richiesta precedente ancora in corso");
       break;
-      
+    
     case HTTPEventType::Chunk:
-      Serial.printf("📦 Chunk ricevuto: %d bytes\n", response->contentLength);
+      Serial.printf("📦 Chunk: %d bytes\n", res->contentLength);
       break;
-      
+    
     default:
       break;
   }
 }
 
-```
----------------------------------------------------
-🔐 HTTPS
-```cpp
-WiFiClientSecure secureClient;
-
-secureClient.setInsecure(); // oppure setCACert(...)
-
-client.setClient(&secureClient);
-```
---------------------------------------------------
-
-
-🧰 Esempi inclusi
-- GET_Example.ino
-- POST_Example.ino
-- HTTPS_secureClient_Example.ino
-- AsyncTestServer.ino → server web per testare richieste in tempo reale
-
-🌐 Server di test
-Il file AsyncTestServer.ino ospita un server web su ESP32 per simulare risposte HTTP.
-Puoi usarlo per testare:
-- Ricezione di richieste GET/POST
-- Logging degli header ricevuti
-- Risposte personalizzate con server.sendHeader(...)
-- In test EMBEDDED ( server + client) utilizzare RTOS...
-
-🧠 Modalità mista (asincrona + sincrona)
-La libreria è progettata per funzionare in ambienti misti:
-- Nel loop() puoi usare poll() per gestire richieste asincrone
-- Quando serve una risposta immediata, usa runSync(...)
-- La libreria gestisce internamente eventuali conflitti
-
-### Setup rapido
-
-#include "AsyncHTTPClientLight.h"
-
-Per abilitare il debug (AsyncHTTPClientLight.cpp):
-```cpp
-#define ASYNC_HTTP_DEBUG 1
-#define ASYNC_HTTP_LOG_SPIFFS // oppure ASYNC_HTTP_LOG_SD
-```
-Disabilitazione debug dalla compilazione (less -3kb):
-```cpp
-#define ASYNC_HTTP_DEBUG 0
+http.onEvent(handleEvent);
 ```
 
+**Nota importante:** Il payload `http.getResponsePayload()` è valido **solo dentro la callback**. Dopo che la callback torna, il buffer viene liberato per la prossima richiesta.
 
-🧪 Esempio asincrono
-```cpp
-client.addTitle("📦 Invio dati sensore");
-client.beginRequest("https://api.example.com/data", "POST", jsonPayload);
-Nel loop():
+---
 
-client.poll();
-if (client.isFinished()) {
-  // Richiesta completata
-}
-```
+## 🔐 HTTPS
 
-💾 Logging su file
-```cpp
-client.setLogToFile(true); // Salva su SPIFFS o SD
-```
-Il file http_log.txt viene creato automaticamente nella root e contiene:
-```txt
-Code
-[REQ 1] === Invio dati sensore ===
-[REQ 1] Inizio richiesta POST a https://api.example.com/data
-[REQ 1] Richiesta completata
-```
-
-## HTTPS supportato
-```cpp
-secureClient.setInsecure(); // oppure setCACert(...) per certificati validi
-```
-
-Buffer Personalizzato
-void setResponsePayload(char* buffer, size_t maxLen)
-Usa un buffer esterno anziché quello interno (768 byte).
-```cpp
-char myBuffer[2048];
-http.setResponsePayload(myBuffer, sizeof(myBuffer));
-http.beginRequest("https://api.example.com/large-data");
-// La risposta verrà memorizzata in myBuffer
-```
-const char* getResponsePayload()
-Ottiene il buffer della risposta.
-```cpp
-const char* payload = http.getResponsePayload();
-```
-
-🔍 Strutture Dati
-HTTPResponse
-Contiene i dati della risposta ricevuta.
-```cpp
-struct HTTPResponse {
-    int statusCode;           // 200, 404, 500, ecc.
-    uint32_t restime;         // Tempo di risposta (ms)
-    char inprogressTitle[64]; // Titolo della richiesta
-    char contentType[45];     // "application/json", ecc.
-    int contentLength;        // Lunghezza payload (byte)
-    bool isStream;            // Trasferimento a lunghezza fissa
-    bool isChunked;           // Trasferimento chunked
-    int expectedLength;       // Lunghezza attesa chunk
-    char* ptr_workbuffer;     // Buffer di lavoro interno
-    char msg_error[40];       // Messaggio errore
-};
-```
-HTTPEventType
-Tipi di evento HTTP.
-```cpp
-enum class HTTPEventType {
-  Response,   // Risposta ricevuta
-  Error,      // Errore generico
-  Timeout,    // Timeout raggiunto
-  Overload,   // Richiesta già in corso
-  Chunk,      // Dati chunked ricevuti
-  Receiving,  // Ricezione in corso
-  Line        // Linea ricevuta
-};
-```
-💡 Esempi Avanzati
-Esempio 1: GET con Header Personalizzato
-```cpp
-#include "AsyncHTTPClientLight.h"
-
-AsyncHTTPClientLight http;
-
-void setup() {
-  Serial.begin(115200);
-  WiFi.begin("SSID", "PASSWORD");
-  
-  http.setDebug(true);
-  http.onEvent(handleEvent);
-  
-  // Aggiungi header custom
-  http.addHeader("Authorization", "Bearer eyJhbGc...");
-  http.addHeader("Accept", "application/json");
-  
-  // Avvia richiesta
-  http.addTitle("API Call");
-  http.beginRequest("https://api.example.com/user/profile");
-}
-
-void loop() {
-  http.poll();
-  delay(10);
-}
-
-void handleEvent(HTTPEventType type, const HTTPResponse* resp) {
-  if (type == HTTPEventType::Response && resp->statusCode == 200) {
-    Serial.println("Profilo ricevuto:");
-    Serial.println(http.getResponsePayload());
-  }
-}
-```
-Esempio 2: POST JSON
-```cpp
-void sendData() {
-  String json = R"({
-    "temperature": 25.5,
-    "humidity": 60,
-    "device_id": "ESP32-001"
-  })";
-  
-  http.addHeader("Content-Type", "application/json");
-  http.addTitle("Send Telemetry");
-  http.beginRequest("https://api.example.com/telemetry", "POST", json);
-}
-
-void handleEvent(HTTPEventType type, const HTTPResponse* resp) {
-  if (type == HTTPEventType::Response) {
-    if (resp->statusCode == 201) {
-      Serial.println("✅ Dati inviati con successo!");
-    } else {
-      Serial.printf("❌ Errore: %d\n", resp->statusCode);
-    }
-  }
-}
-```
-Esempio 3: Gestione File Chunked
-```cpp
-// Ricezione dati chunked automaticamente gestita
-http.addTitle("Large Download");
-http.beginRequest("https://api.example.com/large-file");
-
-void handleEvent(HTTPEventType type, const HTTPResponse* resp) {
-  if (type == HTTPEventType::Chunk) {
-    // Ogni chunk viene elaborato
-    Serial.printf("📦 Chunk: %d bytes ricevuti (totale: %d)\n", 
-                  resp->contentLength, resp->expectedLength);
-  }
-  
-  if (type == HTTPEventType::Response) {
-    Serial.printf("✅ Download completato: %d bytes\n", 
-                  resp->contentLength);
-    // Processa i dati in http.getResponsePayload()
-  }
-}
-```
-Esempio 4: Retry e Timeout
-```cpp
-void setup() {
-  http.setTimeout(3000);      // 3 secondi timeout
-  http.setMaxRetries(5);      // Riprova 5 volte
-  http.setmaxRedirects(3);    // Segui max 3 redirect
-  
-  http.setDebug(true);        // Vedi i tentativi
-  http.onEvent(handleEvent);
-}
-
-void handleEvent(HTTPEventType type, const HTTPResponse* resp) {
-  if (type == HTTPEventType::Timeout) {
-    Serial.printf("⏱️ Timeout al tentativo %s\n", resp->msg_error);
-    // Riprova automatica se retryCount < maxRetries
-  }
-  
-  if (type == HTTPEventType::Response) {
-    if (resp->statusCode == 200) {
-      Serial.println("✅ Successo dopo retry!");
-    } else {
-      Serial.printf("❌ Fallito: HTTP %d\n", resp->statusCode);
-    }
-  }
-}
-```
-Esempio 5: Logging su File
+**Automatico.** Se l'URL contiene `https://`, la libreria abilita da sola `WiFiClientSecure` e usa `setInsecure()`.
 
 ```cpp
-void setup() {
-  // Inizializza SD card
-  if (!SD.begin(SS_PIN)) {
-    Serial.println("SD init failed!");
-    return;
-  }
-  
-  http.setDebug(true);
-  http.setLogToFile(true);  // Salva su /http_log.txt
-  
-  // I log appariranno su Serial E su SD card
-  http.beginRequest("https://api.example.com/data");
-}
-
-// Il file /http_log.txt conterrà:
-// [REQ 1] === API Call ===
-// [REQ 1] Protocollo: HTTPS
-// [REQ 1] Porta: 443
-// [REQ 1] Host: api.example.com
-// [REQ 1] Path: /data
-// [REQ 1] Tentativo n:1
-// [REQ 1] Connessione riuscita
-// [REQ 1] Sending..
-// [REQ 1] Status code: 200
-// ...
+// Questo basta:
+http.beginRequest("https://api.example.com/data", "GET");
 ```
 
-⚙️ Configurazione Logging (avanzato)
-Nel file AsyncHTTPClientLight.cpp, modifica le linee iniziali:
+⚠️ **ATTENZIONE:** Il certificato NON viene verificato (`setInsecure()`). La connessione è cifrata ma non autenticata — chi sniffa la rete potrebbe fingersi il server. Va bene per dati non sensibili (meteo, log, telemetria). Per token o credenziali importanti, non è adatto (serve un'upgrade con `setCACert()`).
+
+---
+
+## 📝 Esempi Reali Inclusi
+
+### 1. `Sync_GET.ino` — Modalità sincrona semplice
+Mostra GET e POST bloccanti, utile per setup.
+
+### 2. `GoogleSheets_Logger.ino` — Log periodico su Google Sheets
+- Invia JSON ogni 60s
+- Gestisce il 302 redirect di Apps Script
+- Callback unificata
+- Riconnessione WiFi automatica
+
+### 3. `Adafruit_IO_History.ino` — Download storico da Adafruit IO
+- Buffer PSRAM 50KB
+- Parse JSON con ArduinoJson v7
+- API key negli header (X-AIO-Key)
+- Caso d'uso reale: scarica 1000 record e li processa
+
+Copia uno di questi file dal folder `examples/` e adattalo ai tuoi parametri.
+
+---
+
+## 💾 Logging
+
+### Console (Serial)
 ```cpp
-#define ASYNC_HTTP_DEBUG 1  // 0 = disabilita log
+http.setDebug(true);
+```
+Output di esempio:
+```
+[REQ 1] === Mia richiesta ===
+[REQ 1] Protocollo: HTTPS
+[REQ 1] Host: api.example.com
+[REQ 1] Porta: 443
+[REQ 1] Tentativo 1
+[REQ 1] Connessione riuscita
+[REQ 1] Sending...
+[REQ 1] Status code: 200
+[REQ 1] Content-Length: 512
+```
+
+### File (SD/SPIFFS/LittleFS)
+1. Apri `src/AsyncHTTPClientLight.cpp`
+2. Cambia le linee iniziali:
+```cpp
+#define ASYNC_HTTP_DEBUG 1  // 0 per disabilitare
 
 #if ASYNC_HTTP_DEBUG
-  // Seleziona UNO di questi filesystem:
-  
-  #define ASYNC_HTTP_LOG_SD        // SD card
-  //#define ASYNC_HTTP_LOG_SPIFFS    // SPIFFS
-  //#define ASYNC_HTTP_LOG_LittleFS // LittleFS
-  
+  #define ASYNC_HTTP_LOG_SD        // oppure _SPIFFS o _LittleFS
   #define MAXSIZEFILE_LOG 512000   // Max 512 KB prima rotazione
 #endif
 ```
-Log file:
+3. Nel tuo sketch:
+```cpp
+http.setLogToFile(true);
+```
+4. I log vanno in:
+   - `/http_log.txt` (attivo)
+   - `/old_Log.txt` (rotazione precedente)
 
-Attivo: /http_log.txt
-Precedente (rotazione): /old_Log.txt
-------------------------------------------------------------------------
+---
 
-## Tips & Traps
-Timeout non rispettato? Prova con un server locale che simuli lentezza (sleep).
+## 🧠 Cose importanti
 
-Secondo tentativo troppo veloce? Alcuni server ottimizzano la connessione dopo il primo hit.
+### ✅ Il payload rimane valido solo nella callback
+```cpp
+// ✅ GIUSTO: leggi dentro la callback
+void handleEvent(HTTPEventType type, const HTTPResponse* res) {
+  if (type == HTTPEventType::Response) {
+    Serial.println(http.getResponsePayload());
+  }
+}
 
-Dimenticato client.loop()? Senza di lui, niente magia.
+// ❌ SBAGLIATO: il buffer è stato già liberato
+Serial.println(http.getResponsePayload());  // → garbage
+```
 
-URL errato? Controlla bene: anche un https:// al posto di http:// può mandare tutto in tilt.
+### ✅ Chiama sempre `poll()` nel loop()
+```cpp
+void loop() {
+  http.poll();  // ← OBBLIGATORIO per modalità asincrona
+  // ... resto del codice
+}
+```
 
-Debug? Usa Serial.println(client.getStatusCode()); per vedere cosa succede.
+### ✅ Una sola richiesta alla volta
+Se avvi una nuova richiesta mentre ce n'è una in corso, ricevi `Overload` nella callback.
 
-🧠 Test consigliati
-🌐 URL lento: https://tools-httpstatus.pickup-services.com/200?sleep=10000
+```cpp
+if (http.isFinished()) {
+  http.beginRequest(url, "GET");  // OK
+} else {
+  Serial.println("Richiesta precedente ancora in corso");
+}
+```
 
-🖥️ Server locale con delay
+### ✅ Buffer grande per payload largi
+Il buffer interno è 768 byte. Per download di decine di KB, usa PSRAM:
 
-🔄 Retry su http://example.com/fail
+```cpp
+char* bigBuffer = (char*)ps_malloc(50000);  // 50 KB
+http.setResponsePayload(bigBuffer, 50000);
+http.beginRequest(url, "GET");
+// Dopo la callback:
+free(bigBuffer);
+```
 
--------------------------------------------------------
-## Note finali
-Questa libreria è pensata per essere leggera, affidabile e facilmente integrabile in progetti embedded.
- Ogni funzione è progettata per offrire controllo senza complicazioni,
- e ogni log è pensato per aiutarti a capire cosa succede sotto il cofano.
+---
 
+## 🚨 Troubleshooting
 
-📜 Licenza
-Questo progetto è distribuito sotto licenza MIT.
-Puoi usarlo, modificarlo e condividerlo liberamente.
+### "Richiesta fallita senza motivo"
+→ Abilita il log: `http.setDebug(true)`. Leggi il prefisso `[REQ n]` nel Serial Monitor per capire dove blocca (connessione, timeout, DNS, ecc).
 
+### "Timeout casuale su un server veloce"
+→ Aumenta il timeout: `http.setTimeout(15000)` (15 secondi). Alcuni server rispondono lentamente al primo hit.
 
+### "HTTP 302 non viene seguito"
+→ Aumenta i redirect: `http.setmaxRedirects(5)`. Default è 1.
+
+### "Risposta parziale o corrotta"
+→ Usa un buffer esterno più grande: `http.setResponsePayload(bigBuf, bigSize)`. Il buffer interno è solo 768 byte.
+
+### "Memory leak / crash dopo tante richieste"
+→ Controlla che chiami `poll()` **a ogni loop()**. Se la salti, le risorse non si liberano.
+
+### "WiFi cade durante richiesta"
+→ Aggiungi controllo WiFi nel loop:
+```cpp
+if (WiFi.status() != WL_CONNECTED) {
+  Serial.println("WiFi perso, riconnetto...");
+  WiFi.reconnect();
+  return;
+}
+```
+
+---
+
+## 📊 Strutture Dati
+
+### HTTPResponse
+```cpp
+struct HTTPResponse {
+  int statusCode;            // 200, 404, 500, -1 se errore
+  uint32_t restime;          // Tempo di risposta (ms)
+  char inprogressTitle[64];  // Etichetta della richiesta
+  char contentType[45];      // "application/json", ecc.
+  int contentLength;         // Lunghezza payload (bytes)
+  bool isStream;             // Trasferimento a lunghezza fissa
+  bool isChunked;            // Trasferimento chunked
+  int expectedLength;        // Lunghezza attesa chunk
+  char* ptr_workbuffer;      // Buffer interno
+  char msg_error[50];        // Messaggio errore
+};
+```
+
+### HTTPEventType
+```cpp
+enum class HTTPEventType {
+  Response,   // Risposta ricevuta (status 200, 404, ecc)
+  Error,      // Errore generico (connessione, parsing)
+  Timeout,    // Timeout raggiunto (retry automatico)
+  Overload,   // Richiesta già in corso
+  Chunk,      // Dati chunked ricevuti (parziale)
+  Receiving,  // Ricezione in corso
+  Line        // Linea ricevuta (non chunked)
+};
+```
+
+---
+
+## 📖 Ricorda: quando usi cos'è
+
+| Caso d'uso | Usa | Perché |
+|-----------|-----|-------|
+| Setup WiFi, carica config | `runSync()` | Semplice, una volta sola |
+| Sensore periodico ogni 1 min | `beginRequest()` + `poll()` | Loop non si ferma |
+| Download file grande | `setResponsePayload()` + `beginRequest()` | Buffer PSRAM |
+| API con auth Bearer | `addHeader("Authorization", "Bearer...")` | Header custom |
+| Google Sheets o Adafruit IO | `setmaxRedirects(3)` | Gestiscono redirect |
+| Debug: perché fallisce? | `setDebug(true)` + Serial | Log dettagliato |
+
+---
+
+## 🧪 Test consigliati
+
+- **Richiesta lenta:** `https://httpbin.org/delay/5` (aspetta 5s)
+- **Errore 404:** `https://httpbin.org/status/404`
+- **JSON valido:** `https://httpbin.org/json`
+- **POST echo:** `https://httpbin.org/post` (ritorna quello che invii)
+
+---
+
+## 📝 Note Finali
+
+Questa libreria è progettata per chi fa IoT, data logging e telemetria su ESP32 e vuole **stabilità** e **trasparenza**. Ogni funzione è stata scelta per offrire controllo senza complicazioni.
+
+Se HTTPClient ti ha dato problemi, AsyncHTTPClientLight risolve quelli più comuni (memory leak, redirect, timeout misterioso).
+
+---
+
+## 📜 Licenza
+
+MIT License — usala, modificala, condividila liberamente.
+
+---
+
+**Maintainer:** Davide (copida.soft@gmail.com)  
+**Repository:** https://github.com/copida/AsyncHTTPClientLight
