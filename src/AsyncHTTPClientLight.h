@@ -76,12 +76,12 @@ class AsyncHTTPClientLight {
 	void beginRequest(const char* url, const char* method = "GET", const char* payload = nullptr);
 	
 	
-	int runSync(const String& url, const String& method = "GET", const String& payload = ""){
+	int runSync(const String& url, const String& method_ = "GET", const String& payload = ""){
 		const char* p = (payload.length() > 0)? payload.c_str(): nullptr;
-		return runSync(url.c_str(), method.c_str(), p);
+		return runSync(url.c_str(), method_.c_str(), p);
 	};
 	
-	int runSync(const char* url, const char* method = "GET", const char* payload = "");
+	int runSync(const char* url, const char* method_ = "GET", const char* payload = "");
 	
 	
   void addHeader(const String& key, const String& value);
