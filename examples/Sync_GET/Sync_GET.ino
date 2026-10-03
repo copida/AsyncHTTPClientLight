@@ -114,8 +114,7 @@ void setup() {
   Serial.println("\n--- ESEMPIO 2: POST JSON ---");
   String response2;
   const char* jsonData = "{\"name\":\"ESP32\",\"action\":\"test\"}";
-  //if (postSync("http://httpbin.org/post", jsonData, response2)) {
-  if (postSync("https://jsonplaceholder.typicode.com/posts", jsonData, response2)) {
+  if (postSync("http://httpbin.org/post", jsonData, response2)) {
     Serial.println(response2);
   }
 
