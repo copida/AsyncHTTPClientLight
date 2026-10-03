@@ -274,7 +274,7 @@ void AsyncHTTPClientLight::readHeader(const String& _header) {
 	* @param payload Corpo della richiesta (solo per POST/PUT).
 	* @return Codice di stato HTTP ricevuto.
 */
-int AsyncHTTPClientLight::runSync(const char* url, const char* methodGET, const char* payload) {
+int AsyncHTTPClientLight::runSync(const char* url, const char* method_, const char* payload) {
 	// aspetto se eventualmente c'è una richiesta asincrona in corso la porto a termine
 	if(!finished){
 		log(F("Wait end Asincrona : %s"), response.inprogressTitle);
@@ -292,7 +292,7 @@ int AsyncHTTPClientLight::runSync(const char* url, const char* methodGET, const 
 	//startTime = millis();
 	//lastActivity = millis();
 	
-	beginRequest(url, method, payload);
+	beginRequest(url, method_, payload);
 	
 	while (!isFinished()) {
 		vTaskDelay(pdMS_TO_TICKS(10));
