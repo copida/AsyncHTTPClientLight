@@ -1,10 +1,43 @@
-AsyncHTTPClientLight    KEYWORD1
-beginRequest    KEYWORD2
-addHeader   KEYWORD2
-poll    KEYWORD2
-setTimeout  KEYWORD2
-setDebug    KEYWORD2
-setLogToFile    KEYWORD2
-onRequestComplete   KEYWORD2
-onChunkReceived KEYWORD2
-onError KEYWORD2
+#######################################
+# Syntax Highlighting Table For AsyncHTTPClientLight
+#######################################
+
+#######################################
+# Datatypes and Classes (KEYWORD1)
+#######################################
+
+AsyncHTTPClientLight	KEYWORD1
+HTTPResponse	KEYWORD1
+HTTPEventType	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+beginRequest	KEYWORD2
+runSync	KEYWORD2
+poll	KEYWORD2
+isFinished	KEYWORD2
+getLastHTTPcode	KEYWORD2
+getResponsePayload	KEYWORD2
+setResponsePayload	KEYWORD2
+addHeader	KEYWORD2
+addTitle	KEYWORD2
+setTimeout	KEYWORD2
+setMaxRetries	KEYWORD2
+setmaxRedirects	KEYWORD2
+setDebug	KEYWORD2
+setLogToFile	KEYWORD2
+onEvent	KEYWORD2
+
+#######################################
+# Constants and Enumerators (LITERAL1)
+#######################################
+
+Response	LITERAL1
+Error	LITERAL1
+Timeout	LITERAL1
+Overload	LITERAL1
+Chunk	LITERAL1
+Receiving	LITERAL1
+Line	LITERAL1
