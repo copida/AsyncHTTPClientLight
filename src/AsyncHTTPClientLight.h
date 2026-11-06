@@ -1,194 +1,87 @@
-#pragma once
-
-#include <Arduino.h>
-#include <vector>
-#include <WiFiClient.h>
-#include <WiFiClientSecure.h>
-#include <functional>
-
-#define LINE_BUFFER_SIZE 768
-#define PATH_BUFFER 512
-
-#define CHUNK_WAITING -1
-
-#define WORKBUFFER workBuffer
-#define PATHBUFFER workBuffer
-#define WORKBUFFER_SIZE 512
-
-
-enum class HTTPEventType {
-  Response,	// fine risposta
-  Error,
-  Timeout,
-  Overload,
-  Chunk,	// dati chunked
-  Receiving,
-  Line	// linea normale (non chunked)
-};
-
-enum ChunkState {
-	WAITING_SIZE,
-	READING_DATA,
-	SKIPPING_CHUNK_CRLF,
-	SKIPPING_CRLF,
-	FINISHED
-};
-
-
-struct HTTPResponse {
-	int statusCode = -1;
-	uint32_t restime = 0;
-	char inprogressTitle[64] = {0};
-	char contentType[45] = {0};
-	int contentLength = 0;
-	bool isStream = false;
-	bool isChunked = false;
-	int expectedLength = CHUNK_WAITING;
+#ifndef SMTP_MINI_H
+	#define SMTP_MINI_H
 	
-	char* ptr_workbuffer = nullptr;			// per chunked e altro..
-	char msg_error[50] = {0};			// per messaggi di errore
-	char backHeader[80] = {0};			// contenuto header letto...readHeader()
-};
-
-
-//using UnifiedCallback = std::function<void(HTTPEventType, const char* data, size_t length)>;
-using UnifiedCallback = std::function<void(HTTPEventType type, const HTTPResponse* response)>;
-
-
-class AsyncHTTPClientLight {
-	public:
-  AsyncHTTPClientLight();
+	#include <Arduino.h>
 	
-	void setResponsePayload(char* buffer, size_t maxLen) {
-    responsePayloadBuffer = buffer;
-    responsePayloadMaxLen = maxLen;
-		newPtrOut = true;
-	}
+	// --- DEBUG CONDIZIONALE ---
+	// Decommenta la riga sotto per vedere tutto il traffico SMTP sul monitor seriale.
+	#define SMTP_MINI_DEBUG
 	
-	const char* getResponsePayload() {
-		return responsePayloadBuffer;
-	}
+	//#define ENABLE_TIMEINFO
+	#define SMTP_SERVER "smtp.gmail.com"
 	
-  void beginRequest(const String& url, const String& method = "GET", const String& payload = ""){
-		const char* p = (payload.length() > 0)? payload.c_str(): nullptr;
-		return beginRequest(url.c_str(), method.c_str(), p);
-	};
-	void beginRequest(const char* url, const char* method = "GET", const char* payload = nullptr);
+	//#define MULTIRCPT
 	
+	// Decommenta questa riga se usi la porta 587 (STARTTLS)
+	// Commentala se usi la porta 465 (Gmail o altri con SSL implicito)
+	//#define SMTP_USE_STARTTLS
 	
-	int runSync(const String& url, const String& method_ = "GET", const String& payload = ""){
-		const char* p = (payload.length() > 0)? payload.c_str(): nullptr;
-		return runSync(url.c_str(), method_.c_str(), p);
+	#ifndef SMTP_USE_STARTTLS
+    #include <WiFiClientSecure.h>
+    #define SMTP_PORT 465
+		#else
+    #include <WiFiClient.h>
+    #include <ESP_SSLClient.h>
+    #define SMTP_PORT 587
+	#endif
+	
+	#include <FS.h>
+	
+	// STRUTTURA ALLEGATI
+	struct SMTPAttachment {
+    const char* nomeFile = nullptr;   
+    const void* bufferRAM = nullptr;   
+    size_t lunghezzaRAM = 0;           
+		
+    // Costruttore per file da FileSystem
+    SMTPAttachment(const char* file) 
+		: nomeFile(file), bufferRAM(nullptr), lunghezzaRAM(0) {}
+		
+    // Costruttore per buffer RAM / PROGMEM
+    SMTPAttachment(const char* nome, const void* ram, size_t len) 
+		: nomeFile(nome), bufferRAM(ram), lunghezzaRAM(len) {}
 	};
 	
-	int runSync(const char* url, const char* method_ = "GET", const char* payload = "");
+	class SmtpMini {
+		public:
+    // Costruttore unico senza parametri esterni: gestisce la rete autonomamente
+    SmtpMini();
+		
+    bool begin(const char* email, const char* appPassword, fs::FS* fileSystem = nullptr);
+    void setSmtpServer(const char* host, uint16_t port, const char* certCA = nullptr);
+    bool sendEmail(const char* to, const char* subject, const char* body, bool isHtml = false, SMTPAttachment* attachments = nullptr, size_t attachmentCount = 0);
+    int getLastError() const;
+		
+    //#ifdef ENABLE_TIMEINFO
+		const char* _timeSMTP = nullptr;
+		void setSMTPtime(const char* timestr) { _timeSMTP = timestr; }
+    //#endif
+		
+		private:
+    const char* _host = SMTP_SERVER;
+    uint16_t _port = SMTP_PORT;
+    const char* _email = nullptr;
+    const char* _appPassword = nullptr;
+    const char* _certCA = nullptr;
+    
+		
+    // Gestione nativa e diretta dei client
+    #ifdef SMTP_USE_STARTTLS
+			WiFiClient basic_client;     // Client TCP di base
+			ESP_SSLClient _sslClient;    // Wrapper TLS
+			#else
+			WiFiClientSecure _sslClient; // Client SSL nativo ESP32
+		#endif
+		
+    fs::FS* _fsDevice = nullptr;
+    int _lastErrorCode = 0;
+		
+    int readSMTPResponse();
+    bool readSMTPLine(char* line, size_t size, uint32_t timeoutMs = 10000);
+    bool smtpCommand(const char* command, int expected);
+    bool codifica64(const uint8_t* data, size_t len, bool mime);
+    bool codificaFILE(const char* percorso);
+    bool inviaBody(const char* body);
+	};
 	
-	
-  void addHeader(const String& key, const String& value);
-	void addTitle(const String& title);
-  void setTimeout(unsigned long ms);
-  void setDebug(bool enabled);
-  void setLogToFile(bool enabled);
-  void setMaxRetries(int retries);
-	void setmaxRedirects(int ndirect);
-  void onEvent(UnifiedCallback cb);
-	void readHeader(const String& _header);
-	
-	
-	int getLastHTTPcode() const;
-	
-	void poll();
-	void poll2();
-	bool isFinished();
-	bool finished;
-	
-	
-	private:
-	WiFiClient plainClient;
-	WiFiClientSecure secureClient;
-	WiFiClient* client;
-	
-	
-	HTTPResponse response;
-	
-	char _backHeader[40] = { '\0'};
-	char* responsePayloadBuffer = nullptr;
-	size_t responsePayloadMaxLen = 0;
-	bool newPtrOut = false;
-	size_t _offset = 0;
-	size_t _lenchunk = 0;
-	
-	char host[40];
-	char workBuffer[WORKBUFFER_SIZE];
-	int port;
-	bool useSSL;
-	String method = "       ";
-	char* ptr_Inpayload = nullptr;
-	
-	std::vector<std::pair<String, String>> pendingHeaders;
-	std::vector<std::pair<String, String>> inprogressHeaders;
-	
-	enum State { IDLE,
-		CONNECTING,
-		SENDING,
-	RECEIVING };
-	State state;
-	
-	char lineBuffer[LINE_BUFFER_SIZE];
-	size_t bufIndex = 0;
-	//String logPrefix;
-	char logPrefix[12] = {0};
-	char pendingTitle[64] = {0};  // titolo massimo 63 caratteri + terminatore
-	
-	bool _isSyncMode = false;
-	unsigned long timeoutMs;
-	unsigned long lastActivity;
-	bool payloadAllocated = false;
-	bool headersParsed;
-	int chunkState = WAITING_SIZE;
-	int totChunk = 0;
-	
-	int requestCounter;
-	int maxRetries;
-	int retryCount;
-	int redirectCount;
-	int maxRedirects = 1;
-	
-	bool debugEnabled;
-	bool logToFile;
-	
-	
-	UnifiedCallback unifiedCallback;
-	std::function<void(int)> retryCallback;
-	
-	void endhttp();
-	void endclient();
-	void reset();
-	bool parseURL(const char* url);
-	//void log(const String& msg);
-	//#if ASYNC_HTTP_DEBUG
-	// Versione standard per stringhe classiche (char*)
-	void log(const char* formato, ...);
-	
-	// NUOVA: Versione per stringhe racchiuse nella macro F()
-	void log(const __FlashStringHelper* formato, ...);
-	//	#endif
-	
-	void checktimeout();
-	void connecting();
-	void sending();
-	void receiving();
-	int trimmer(char* buftrim,  int dadove = 0);
-	int search_strbuf(const char* buffer, char* word_cmp, int fromwhere = 0);
-	//int bufferChr(const char* str, char c);
-	void releasePayload();
-	void parseHeaders();
-	int readUntilTerminator(Stream* client, char* buffer, size_t maxLen, char terminator, unsigned long timeoutMs, bool delCR = true);
-	bool readChunked();
-	int readStream(char* buffer, int lenbuffer, int ndati );
-	void readAll(Stream* client, char* buffer, size_t maxLen);
-	
-	void triggerEvent(HTTPEventType type, const char* data);
-	void triggerEvent(HTTPEventType type, const String& message);
-	
-};
+#endif
